@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..services import review_service, versioning
+from ..services import review_service, validation, versioning
 
 router = APIRouter(prefix="/api/rules", tags=["rules"])
 
@@ -90,3 +90,40 @@ def list_rule_versions(rule_id: str, db: Session = Depends(get_db)):
         .all()
     )
     return [schemas.RuleVersionOut.model_validate(r) for r in rows]
+
+
+@router.post("/{rule_id}/validate", response_model=schemas.RuleAssessmentOut)
+def validate_rule(rule_id: str, db: Session = Depends(get_db)):
+    """Re-run validation + dedup/conflict detection on an existing rule.
+
+    Returns the assessment without mutating the rule. Use this from the
+    Admin/Review UI to preview what would happen on publish.
+    """
+    rule = review_service.get_rule(db, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    payload = validation._rule_to_payload(rule)
+    res, conflict = validation.assess_candidate(
+        db, payload, raw_confidence=rule.confidence_score, exclude_rule_id=rule.id
+    )
+    return schemas.RuleAssessmentOut(
+        rule_id=rule.id,
+        validation=schemas.ValidationOut(**res.to_dict()),
+        conflicts=schemas.ConflictOut(
+            duplicate_of=conflict.duplicate_of,
+            conflicting_rule_ids=conflict.conflicting_rule_ids,
+            notes=conflict.notes,
+        ),
+    )
+
+
+@router.get("/{rule_id}/conflicts", response_model=list[schemas.RuleOut])
+def list_rule_conflicts(rule_id: str, db: Session = Depends(get_db)):
+    rule = review_service.get_rule(db, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    payload = validation._rule_to_payload(rule)
+    conflicts = validation.find_conflicting_rules(
+        db, candidate=payload, exclude_rule_id=rule.id
+    )
+    return [schemas.RuleOut.model_validate(r) for r in conflicts]

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
-from ..services import review_service
+from ..services import review_service, validation
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -37,6 +37,22 @@ def rule_action(
     payload: schemas.ReviewActionRequest,
     db: Session = Depends(get_db),
 ):
+    # Hard gate: publish requires validation to pass and the rule to be
+    # in approved/auto_validated. We never publish straight from extraction.
+    if payload.action == "publish":
+        existing = review_service.get_rule(db, rule_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Rule not found")
+        ok, blockers = validation.can_publish(existing)
+        if not ok:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "Rule cannot be published",
+                    "blockers": blockers,
+                },
+            )
+
     try:
         rule = review_service.review_action(
             db,

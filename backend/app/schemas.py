@@ -124,12 +124,17 @@ class RuleBase(BaseModel):
     state: str
     tax_category: str
     rule_category: Optional[str] = None
+    workflow_stage: Optional[str] = None
+    operating_scenario: Optional[str] = None
+    condition_logic: Optional[str] = None
+    submission_method: Optional[str] = None
     rule_title: str
     rule_summary: str
     detailed_rule: Optional[str] = None
     conditions: Optional[list[str]] = None
     required_actions: Optional[list[str]] = None
     required_forms: Optional[list[str]] = None
+    required_documentation: Optional[list[str]] = None
     deadlines: Optional[list[str]] = None
     exceptions: Optional[list[str]] = None
     source_url: Optional[str] = None
@@ -148,12 +153,18 @@ class RuleCreate(RuleBase):
 class RuleUpdate(BaseModel):
     state: Optional[str] = None
     tax_category: Optional[str] = None
+    rule_category: Optional[str] = None
+    workflow_stage: Optional[str] = None
+    operating_scenario: Optional[str] = None
+    condition_logic: Optional[str] = None
+    submission_method: Optional[str] = None
     rule_title: Optional[str] = None
     rule_summary: Optional[str] = None
     detailed_rule: Optional[str] = None
     conditions: Optional[list[str]] = None
     required_actions: Optional[list[str]] = None
     required_forms: Optional[list[str]] = None
+    required_documentation: Optional[list[str]] = None
     deadlines: Optional[list[str]] = None
     exceptions: Optional[list[str]] = None
     source_url: Optional[str] = None
@@ -168,6 +179,9 @@ class RuleOut(RuleBase):
     id: str
     source_id: Optional[str] = None
     extraction_method: Optional[str] = None
+    lineage: Optional[dict[str, Any]] = None
+    validation_errors: Optional[list[str]] = None
+    validation_warnings: Optional[list[str]] = None
     current_version: int = 1
     supersedes_rule_id: Optional[str] = None
     created_at: datetime
@@ -175,6 +189,26 @@ class RuleOut(RuleBase):
 
     class Config:
         from_attributes = True
+
+
+class ValidationOut(BaseModel):
+    valid: bool
+    errors: list[str] = []
+    warnings: list[str] = []
+    suggested_review_status: str
+    adjusted_confidence: float
+
+
+class ConflictOut(BaseModel):
+    duplicate_of: Optional[str] = None
+    conflicting_rule_ids: list[str] = []
+    notes: list[str] = []
+
+
+class RuleAssessmentOut(BaseModel):
+    rule_id: str
+    validation: ValidationOut
+    conflicts: ConflictOut
 
 
 class RuleVersionOut(BaseModel):

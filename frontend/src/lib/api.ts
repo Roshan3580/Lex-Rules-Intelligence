@@ -31,12 +31,17 @@ export interface Rule {
   state: string;
   tax_category: TaxType | string;
   rule_category?: string | null;
+  workflow_stage?: string | null;
+  operating_scenario?: string | null;
+  condition_logic?: string | null;
+  submission_method?: string | null;
   rule_title: string;
   rule_summary: string;
   detailed_rule?: string | null;
   conditions?: string[] | null;
   required_actions?: string[] | null;
   required_forms?: string[] | null;
+  required_documentation?: string[] | null;
   deadlines?: string[] | null;
   exceptions?: string[] | null;
   source_id?: string | null;
@@ -47,6 +52,9 @@ export interface Rule {
   confidence_score: number;
   review_status: ReviewStatus;
   extraction_method?: string | null;
+  lineage?: Record<string, unknown> | null;
+  validation_errors?: string[] | null;
+  validation_warnings?: string[] | null;
   current_version?: number;
   supersedes_rule_id?: string | null;
   created_at: string;
@@ -117,6 +125,26 @@ export interface RuleVersion {
   notes?: string | null;
   captured_reason?: string | null;
   created_at: string;
+}
+
+export interface RuleValidation {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  suggested_review_status: ReviewStatus | string;
+  adjusted_confidence: number;
+}
+
+export interface RuleConflicts {
+  duplicate_of?: string | null;
+  conflicting_rule_ids: string[];
+  notes: string[];
+}
+
+export interface RuleAssessment {
+  rule_id: string;
+  validation: RuleValidation;
+  conflicts: RuleConflicts;
 }
 
 export interface SourceVersion {
@@ -341,6 +369,12 @@ export const api = {
 
   sourceVersions: (id: string) =>
     request<SourceVersion[]>(`/api/sources/${id}/versions`),
+
+  validateRule: (id: string) =>
+    request<RuleAssessment>(`/api/rules/${id}/validate`, { method: "POST" }),
+
+  ruleConflicts: (id: string) =>
+    request<Rule[]>(`/api/rules/${id}/conflicts`),
 
   uploadFile: async (
     file: File,

@@ -27,7 +27,9 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..utils.llm_client import llm_client
-from . import versioning
+from . import validation, versioning
+
+PROMPT_VERSION = "v2-phase4"
 
 logger = logging.getLogger(__name__)
 
@@ -152,12 +154,18 @@ def _llm_prompt(state: Optional[str], category: Optional[str], chunk_text: str) 
         '{ "rules": [ {\n'
         '  "state": "<US state name>",\n'
         '  "tax_category": "sales_tax|payroll_tax|corporate_tax|income_tax|withholding|franchise_tax|other",\n'
+        '  "rule_category": "registration|filing|payment|exemption|threshold|penalty|other",\n'
+        '  "workflow_stage": "intake|verification|documentation|submission|resolution|other",\n'
+        '  "operating_scenario": "short description of the taxpayer scenario this rule applies to",\n'
         '  "rule_title": "short title",\n'
         '  "rule_summary": "1-3 sentence plain-English summary",\n'
         '  "detailed_rule": "longer explanation if helpful",\n'
+        '  "condition_logic": "structured if/when phrasing of when this rule applies",\n'
         '  "conditions": ["..."],\n'
         '  "required_actions": ["..."],\n'
         '  "required_forms": ["Form ABC-123"],\n'
+        '  "required_documentation": ["business license", "EIN letter"],\n'
+        '  "submission_method": "online_portal|mail|in_person|eft|phone|other",\n'
         '  "deadlines": ["April 15"],\n'
         '  "exceptions": ["..."],\n'
         '  "effective_date": "optional ISO date or year",\n'
@@ -166,9 +174,12 @@ def _llm_prompt(state: Optional[str], category: Optional[str], chunk_text: str) 
         "} ] }\n\n"
         "Rules:\n"
         "- Only include rules clearly supported by the text.\n"
-        "- source_snippet must be a literal substring of the SOURCE TEXT.\n"
+        "- source_snippet MUST be a literal substring of the SOURCE TEXT.\n"
+        "- Use the controlled vocabularies above for workflow_stage and submission_method.\n"
+        "- Leave fields out (or use null/empty array) if the source does not say.\n"
+        "- Do NOT invent forms, deadlines, thresholds, or penalties.\n"
         "- confidence_score in [0,1].\n"
-        "- If unclear, return an empty rules array.\n\n"
+        "- If the chunk does not clearly express an operational rule, return an empty rules array.\n\n"
         f"SOURCE TEXT:\n\"\"\"\n{chunk_text}\n\"\"\""
     )
 
@@ -180,31 +191,35 @@ def _extract_with_llm(
 ) -> int:
     """Iterate chunks and ask the LLM for normalized rules.
 
-    For cost control we group small chunks together until a soft char
-    budget. This is a prototype; a production implementation would batch
-    far more aggressively and cache by (source_checksum, prompt_version).
+    Chunks are grouped under a soft char budget so a single LLM call covers
+    several short chunks. Each batch records its chunk ids so that lineage
+    metadata on every emitted rule traces back to the chunks that fed it.
     """
     BATCH_CHARS = 4000
-    batches: list[str] = []
-    current = ""
+    batches: list[tuple[str, list[str]]] = []  # (concatenated_text, chunk_ids)
+    current_text = ""
+    current_ids: list[str] = []
     for c in chunks:
-        if len(current) + len(c.text) > BATCH_CHARS and current:
-            batches.append(current)
-            current = c.text
+        if len(current_text) + len(c.text) > BATCH_CHARS and current_text:
+            batches.append((current_text, current_ids))
+            current_text = c.text
+            current_ids = [c.id]
         else:
-            current = (current + "\n\n" + c.text).strip()
-    if current:
-        batches.append(current)
+            current_text = (current_text + "\n\n" + c.text).strip()
+            current_ids.append(c.id)
+    if current_text:
+        batches.append((current_text, current_ids))
 
+    source_version = versioning.latest_source_version(db, source.id)
     created = 0
-    for batch in batches:
+    for batch_text, batch_chunk_ids in batches:
         try:
             data = llm_client.chat_json(
                 [
                     {"role": "system", "content": _LLM_SYSTEM},
                     {
                         "role": "user",
-                        "content": _llm_prompt(source.state, source.tax_category, batch),
+                        "content": _llm_prompt(source.state, source.tax_category, batch_text),
                     },
                 ],
                 temperature=0.1,
@@ -220,7 +235,13 @@ def _extract_with_llm(
         for rule_dict in data.get("rules", []) or []:
             if not isinstance(rule_dict, dict):
                 continue
-            rule = _persist_llm_rule(db, source, rule_dict)
+            rule = _persist_llm_rule(
+                db,
+                source,
+                rule_dict,
+                chunk_ids=batch_chunk_ids,
+                source_version_id=source_version.id if source_version else None,
+            )
             if rule is not None:
                 created += 1
 
@@ -229,7 +250,12 @@ def _extract_with_llm(
 
 
 def _persist_llm_rule(
-    db: Session, source: models.Source, rule_dict: dict[str, Any]
+    db: Session,
+    source: models.Source,
+    rule_dict: dict[str, Any],
+    *,
+    chunk_ids: Optional[list[str]] = None,
+    source_version_id: Optional[str] = None,
 ) -> Optional[models.Rule]:
     title = (rule_dict.get("rule_title") or "").strip()
     summary = (rule_dict.get("rule_summary") or "").strip()
@@ -238,32 +264,84 @@ def _persist_llm_rule(
         return None
 
     try:
-        confidence = float(rule_dict.get("confidence_score") or 0.6)
+        confidence_raw = float(rule_dict.get("confidence_score") or 0.6)
     except (TypeError, ValueError):
-        confidence = 0.6
-    confidence = max(0.0, min(confidence, 1.0))
+        confidence_raw = 0.6
+    confidence_raw = max(0.0, min(confidence_raw, 1.0))
 
-    review_status = "auto_validated" if confidence >= 0.75 else "needs_review"
+    payload = {
+        "state": rule_dict.get("state") or source.state or "Unknown",
+        "tax_category": rule_dict.get("tax_category") or source.tax_category or "other",
+        "rule_category": (rule_dict.get("rule_category") or "").strip() or None,
+        "rule_title": title[:480],
+        "rule_summary": summary,
+        "workflow_stage": (rule_dict.get("workflow_stage") or "").strip().lower() or None,
+        "operating_scenario": (rule_dict.get("operating_scenario") or "").strip() or None,
+        "submission_method": (rule_dict.get("submission_method") or "").strip().lower() or None,
+        "required_actions": _as_list(rule_dict.get("required_actions")),
+        "required_forms": _as_list(rule_dict.get("required_forms")),
+        "deadlines": _as_list(rule_dict.get("deadlines")),
+        "source_id": source.id,
+        "source_url": source.url,
+        "source_document_name": source.name,
+        "source_snippet": snippet[:2000] if snippet else None,
+    }
+
+    res, conflict = validation.assess_candidate(
+        db, payload, raw_confidence=confidence_raw
+    )
+    if not res.valid:
+        logger.info(
+            "LLM rule rejected (validation): title=%r errors=%s",
+            title[:80],
+            res.errors,
+        )
+        return None
+    if conflict.duplicate_of:
+        # Don't store duplicates — caller can re-curate the existing rule.
+        logger.info(
+            "LLM rule skipped — duplicate of %s (title=%r)",
+            conflict.duplicate_of,
+            title[:80],
+        )
+        return None
 
     rule = models.Rule(
-        state=(rule_dict.get("state") or source.state or "Unknown"),
-        tax_category=(rule_dict.get("tax_category") or source.tax_category or "other"),
-        rule_title=title[:480],
-        rule_summary=summary,
+        state=payload["state"],
+        tax_category=payload["tax_category"],
+        rule_category=payload["rule_category"],
+        rule_title=payload["rule_title"],
+        rule_summary=payload["rule_summary"],
         detailed_rule=rule_dict.get("detailed_rule"),
+        workflow_stage=payload["workflow_stage"],
+        operating_scenario=payload["operating_scenario"],
+        condition_logic=(rule_dict.get("condition_logic") or "").strip() or None,
+        submission_method=payload["submission_method"],
         conditions=_as_list(rule_dict.get("conditions")),
-        required_actions=_as_list(rule_dict.get("required_actions")),
-        required_forms=_as_list(rule_dict.get("required_forms")),
-        deadlines=_as_list(rule_dict.get("deadlines")),
+        required_actions=payload["required_actions"],
+        required_forms=payload["required_forms"],
+        required_documentation=_as_list(rule_dict.get("required_documentation")),
+        deadlines=payload["deadlines"],
         exceptions=_as_list(rule_dict.get("exceptions")),
         source_id=source.id,
         source_url=source.url,
         source_document_name=source.name,
-        source_snippet=snippet[:2000] if snippet else None,
+        source_snippet=payload["source_snippet"],
         effective_date=rule_dict.get("effective_date"),
-        confidence_score=confidence,
-        review_status=review_status,
+        confidence_score=res.adjusted_confidence,
+        review_status=res.suggested_review_status,
         extraction_method="llm",
+        validation_errors=res.errors or None,
+        validation_warnings=res.warnings or None,
+        lineage={
+            "extracted_from_chunk_ids": chunk_ids or [],
+            "source_version_id": source_version_id,
+            "source_checksum": source.checksum,
+            "prompt_version": PROMPT_VERSION,
+            "model": llm_client.model,
+            "raw_confidence": confidence_raw,
+            "conflicting_rule_ids": conflict.conflicting_rule_ids or None,
+        },
     )
     db.add(rule)
     return rule
@@ -309,6 +387,8 @@ def _extract_with_heuristics(
     actually express obligations rather than narrative prose.
     """
     state_default = source.state or "Unknown"
+    source_version = versioning.latest_source_version(db, source.id)
+    sv_id = source_version.id if source_version else None
     created = 0
 
     for chunk in chunks:
@@ -335,30 +415,115 @@ def _extract_with_heuristics(
         title = _derive_title(text, category, state_default)
         summary = _derive_summary(text)
 
+        actions = _extract_actions(text)
+        workflow_stage = _infer_workflow_stage(lowered)
+        submission_method = _infer_submission_method(lowered)
+        rule_category = _infer_rule_category(lowered)
+
+        payload = {
+            "state": state_default,
+            "tax_category": category,
+            "rule_category": rule_category,
+            "rule_title": title,
+            "rule_summary": summary,
+            "workflow_stage": workflow_stage,
+            "submission_method": submission_method,
+            "required_actions": actions,
+            "required_forms": forms or None,
+            "deadlines": deadlines or None,
+            "source_id": source.id,
+            "source_url": source.url,
+            "source_document_name": source.name,
+            "source_snippet": text[:1200],
+        }
+        res, conflict = validation.assess_candidate(
+            db, payload, raw_confidence=0.45
+        )
+        if not res.valid or conflict.duplicate_of:
+            continue
+
         rule = models.Rule(
             state=state_default,
             tax_category=category,
+            rule_category=rule_category,
             rule_title=title,
             rule_summary=summary,
             detailed_rule=text[:2000],
+            workflow_stage=workflow_stage,
+            submission_method=submission_method,
+            condition_logic=None,
             conditions=None,
-            required_actions=_extract_actions(text),
+            required_actions=actions,
             required_forms=forms or None,
+            required_documentation=None,
             deadlines=deadlines or None,
             exceptions=None,
             source_id=source.id,
             source_url=source.url,
             source_document_name=source.name,
             source_snippet=text[:1200],
-            confidence_score=0.45,
-            review_status="needs_review",
+            confidence_score=res.adjusted_confidence,
+            review_status=res.suggested_review_status,
             extraction_method="heuristic",
+            validation_errors=res.errors or None,
+            validation_warnings=res.warnings or None,
+            lineage={
+                "extracted_from_chunk_ids": [chunk.id],
+                "source_version_id": sv_id,
+                "source_checksum": source.checksum,
+                "prompt_version": PROMPT_VERSION,
+                "model": "heuristic",
+                "raw_confidence": 0.45,
+                "conflicting_rule_ids": conflict.conflicting_rule_ids or None,
+            },
         )
         db.add(rule)
         created += 1
 
     db.flush()
     return created
+
+
+def _infer_workflow_stage(text_lower: str) -> Optional[str]:
+    if any(k in text_lower for k in ("register", "obtain a permit", "apply for")):
+        return "intake"
+    if any(k in text_lower for k in ("verify", "confirmation", "verified")):
+        return "verification"
+    if any(k in text_lower for k in ("documentation", "records", "keep records")):
+        return "documentation"
+    if any(k in text_lower for k in ("file", "remit", "submit", "pay", "payment")):
+        return "submission"
+    if any(k in text_lower for k in ("appeal", "protest", "resolution", "penalty")):
+        return "resolution"
+    return None
+
+
+def _infer_submission_method(text_lower: str) -> Optional[str]:
+    if any(k in text_lower for k in ("online", "e-file", "efile", "portal", "website")):
+        return "online_portal"
+    if "mail" in text_lower:
+        return "mail"
+    if any(k in text_lower for k in ("eft", "electronic funds", "ach")):
+        return "eft"
+    if "in person" in text_lower or "in-person" in text_lower:
+        return "in_person"
+    return None
+
+
+def _infer_rule_category(text_lower: str) -> Optional[str]:
+    if any(k in text_lower for k in ("register", "permit", "license")):
+        return "registration"
+    if any(k in text_lower for k in ("file", "return", "report")):
+        return "filing"
+    if any(k in text_lower for k in ("pay", "remit", "payment")):
+        return "payment"
+    if "exempt" in text_lower:
+        return "exemption"
+    if "threshold" in text_lower or "nexus" in text_lower:
+        return "threshold"
+    if "penalty" in text_lower or "fine" in text_lower:
+        return "penalty"
+    return None
 
 
 def _derive_title(text: str, category: str, state: str) -> str:

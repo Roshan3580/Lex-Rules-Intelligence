@@ -125,9 +125,17 @@ class Rule(Base):
     rule_summary: Mapped[str] = mapped_column(Text)
     detailed_rule: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    workflow_stage: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # intake | verification | documentation | submission | resolution | other
+    operating_scenario: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    condition_logic: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    submission_method: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # online_portal | mail | in_person | eft | other
+
     conditions: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
     required_actions: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
     required_forms: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
+    required_documentation: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
     deadlines: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
     exceptions: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
 
@@ -144,6 +152,9 @@ class Rule(Base):
     # draft | auto_validated | needs_review | approved | published | rejected
 
     extraction_method: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    lineage: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    validation_errors: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
+    validation_warnings: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
     current_version: Mapped[int] = mapped_column(Integer, default=1)
     supersedes_rule_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("rules.id", ondelete="SET NULL"), nullable=True
