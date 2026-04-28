@@ -338,6 +338,8 @@ export type IngestRunItemStatus =
   | "duplicate"
   | "failed"
   | "updated"
+  | "unchanged"
+  | "skipped"
   | "crawled"
   | "error";
 
@@ -459,6 +461,12 @@ export const api = {
     request<AnalyticsResponse>(
       `/api/analytics${days != null ? `?days=${days}` : ""}`,
     ),
+
+  monitorRun: (payload?: { source_ids?: string[]; limit?: number; auto_extract?: boolean }) =>
+    request<IngestRunResult>("/api/monitor/run", {
+      method: "POST",
+      json: payload ?? {},
+    }),
 
   states: () => request<StateOut[]>("/api/states"),
 

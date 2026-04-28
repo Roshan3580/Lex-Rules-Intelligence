@@ -11,6 +11,7 @@ import {
   Loader2,
   Trash2,
   Play,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +50,7 @@ const Sources = () => {
   const [error, setError] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<IngestRunResult | null>(null);
   const [runBusy, setRunBusy] = useState(false);
+  const [monitorBusy, setMonitorBusy] = useState(false);
 
   // Add-URL form
   const [url, setUrl] = useState("");
@@ -152,6 +154,20 @@ const Sources = () => {
     }
   }
 
+  async function onMonitorRun() {
+    setMonitorBusy(true);
+    setError(null);
+    try {
+      const r = await api.monitorRun({ limit: 50, auto_extract: true });
+      setLastRun(r);
+      await loadSources();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMonitorBusy(false);
+    }
+  }
+
   async function onDelete(id: string) {
     if (!confirm("Delete this source and all its chunks?")) return;
     await api.deleteSource(id);
@@ -178,21 +194,35 @@ const Sources = () => {
             your rule index.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"
             size="sm"
             onClick={loadSources}
-            disabled={loading}
+            disabled={loading || runBusy || monitorBusy}
           >
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             Refresh
           </Button>
           <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void onMonitorRun()}
+            disabled={runBusy || monitorBusy}
+            title="Re-fetch http(s) sources, compare checksums, re-extract if content changed"
+          >
+            {monitorBusy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            Check for updates
+          </Button>
+          <Button
             variant="hero"
             size="sm"
             onClick={onRunIngestion}
-            disabled={runBusy}
+            disabled={runBusy || monitorBusy}
           >
             {runBusy ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -240,7 +270,7 @@ const Sources = () => {
       {/* Last run summary */}
       {lastRun && (
         <div className="rounded-2xl glass p-5 text-sm">
-          <p className="font-semibold mb-1">Last ingestion run</p>
+          <p className="font-semibold mb-1">Last run (ingestion or monitor)</p>
           <p className="text-muted-foreground text-xs mb-3">
             {lastRun.ingested} ingested · {lastRun.duplicates} duplicates ·{" "}
             {lastRun.errors} errors · {lastRun.total} total
@@ -257,7 +287,10 @@ const Sources = () => {
                     className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${
                       it.status === "ingested" || it.status === "updated"
                         ? "bg-success/10 text-success"
-                        : it.status === "duplicate" || it.status === "crawled"
+                        : it.status === "duplicate" ||
+                            it.status === "crawled" ||
+                            it.status === "unchanged" ||
+                            it.status === "skipped"
                           ? "bg-secondary text-muted-foreground"
                           : "bg-destructive/10 text-destructive"
                     }`}

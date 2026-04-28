@@ -10,9 +10,11 @@ import {
   BookCheck,
   AlertCircle,
   Cpu,
+  RefreshCw,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { Confidence } from "@/components/Confidence";
 import {
   api,
@@ -57,11 +59,12 @@ const Dashboard = () => {
   const [health, setHealth] = useState<Health | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [monitorBusy, setMonitorBusy] = useState(false);
 
-  useEffect(() => {
+  const loadDashboard = () => {
     setLoading(true);
     setError(null);
-    Promise.allSettled([api.dashboard(45), api.health()]).then(([d, h]) => {
+    return Promise.allSettled([api.dashboard(45), api.health()]).then(([d, h]) => {
       if (h.status === "fulfilled") setHealth(h.value);
       if (d.status === "fulfilled") {
         setKpis(d.value.kpis);
@@ -78,7 +81,24 @@ const Dashboard = () => {
       }
       setLoading(false);
     });
+  };
+
+  useEffect(() => {
+    void loadDashboard();
   }, []);
+
+  async function onMonitorRun() {
+    setMonitorBusy(true);
+    setError(null);
+    try {
+      await api.monitorRun({ limit: 40, auto_extract: true });
+      await loadDashboard();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMonitorBusy(false);
+    }
+  }
 
   const avgPct = kpis ? Math.round(kpis.avg_confidence * 100) : 0;
 
@@ -127,6 +147,21 @@ const Dashboard = () => {
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            disabled={monitorBusy || loading}
+            onClick={() => void onMonitorRun()}
+            title="Re-fetch URL sources and refresh metrics"
+          >
+            {monitorBusy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            <span className="ml-1.5 hidden sm:inline">Check sources</span>
+          </Button>
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Clock className="h-3.5 w-3.5" />}
           <span>{loading ? "Loading…" : "Live"}</span>
         </div>

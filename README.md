@@ -66,7 +66,7 @@ boundaries:
 │  /app/search   (Rule Search) │ ──────▶ │  routers/ → services/ → models         │
 │  /app/sources  (Sources)     │         │                                        │
 │  /app/review   (Review)      │         │  meta · sources · rules · questions    │
-│  /app                        │         │  · review · ingest                     │
+│  /app                        │         │  · review · ingest · monitor          │
 └──────────────────────────────┘         │                                        │
                                          │  ingestion → extraction →              │
                                          │  retrieval → answer → review           │
@@ -100,6 +100,7 @@ backend/
       questions.py                # POST /api/ask + POST /api/query
       review.py                   # /api/review/queue, edit, action, events
       ingest.py                   # POST /api/ingest/source, /api/ingest/run
+      monitor.py                  # POST /api/monitor/run (checksum / refresh)
     services/
       ingestion_service.py        # PDF + URL + text + uploads → chunks
                                   # checksum-based dedupe, last_checked
@@ -108,6 +109,7 @@ backend/
       answer_service.py           # RAG flow: retrieve → answer → cite
       review_service.py           # Edit / approve / reject / publish + audit
       seed_runner.py              # Loads sources.yaml and ingests each entry
+      monitor_service.py          # Batch refresh + IngestionRun(kind=monitor)
     utils/
       chunking.py                 # Sentence-aware text chunker
       llm_client.py               # OpenAI-compatible HTTP client + JSON parser
@@ -141,6 +143,7 @@ docker-compose.yml                # backend + frontend (+ optional postgres)
 | POST   | `/api/query`                            | RAG Q&A · spec-shaped response with citations     |
 | POST   | `/api/ingest/source`                    | Add one source (URL or pasted text)               |
 | POST   | `/api/ingest/run`                       | Batch-run the curated `sources.yaml` list         |
+| POST   | `/api/monitor/run`                      | Re-check sources: URL fetch + checksum; re-ingest on change |
 | GET    | `/api/sources`                          | List indexed sources                              |
 | POST   | `/api/sources/upload`                   | Multipart PDF/TXT/HTML upload                     |
 | DELETE | `/api/sources/{id}`                     | Remove a source                                   |
@@ -294,7 +297,39 @@ extracted text — re-runs only pick up changes.
 
 To add more states, append entries to `sources.yaml` and re-run.
 
-### 5. Admin review of low-confidence rules
+### 5. Check for source updates (change monitoring)
+
+Operators can re-validate indexed material without another full batch
+ingest:
+
+- **Dashboard:** **Check sources** — calls `POST /api/monitor/run` (same
+  pipeline; default cap may differ from the Sources page).
+- **Sources:** **Check for updates** — same run; see per-source
+  `unchanged` / `updated` / `skipped` / `failed` in the last-run panel.
+
+**API:** `POST /api/monitor/run` with an optional JSON body:
+
+```json
+{
+  "source_ids": ["uuid-optional-subset"],
+  "limit": 50,
+  "auto_extract": true
+}
+```
+
+Omitted `source_ids` walks sources ordered by oldest `updated_at` first,
+capped by `limit` (default 50, max 200). **URL-backed** rows are fetched and
+compared to the stored SHA-256 checksum; **unchanged** sources only get
+`last_checked` bumped. **When content changes**, the pipeline
+re-versions the source, replaces chunks, re-indexes vectors, and (if
+`auto_extract` is true) **replaces extracted `Rule` rows for that
+source** — treat published rules on that document as superseded by the
+new extraction run. Upload-only / pasted / manual rows without a live
+URL are **skipped** for fetch (status `skipped`) but still get
+`last_checked` updated. Each run is recorded as an `IngestionRun` with
+`kind: monitor` for analytics and the UI activity feed.
+
+### 6. Admin review of low-confidence rules
 
 1. Open <http://localhost:8080/app/review>.
 2. Pick a rule from the queue. Inspect the original source snippet
@@ -308,7 +343,7 @@ To add more states, append entries to `sources.yaml` and re-run.
 | ---------------------------------------------- | --------------------------------------------------------------------------- |
 | 4.1 Rules Repository, canonical schema (§6)    | `Rule` ORM model + Pydantic schemas; review-status state machine            |
 | 4.2 Forms / submission intelligence            | `required_forms`, `required_actions`, deadlines structured per rule         |
-| 4.5 Continuous maintenance, ingestion          | `ingestion_service` (PDF/URL/text/upload) + `seed_runner` (sources.yaml)    |
+| 4.5 Continuous maintenance, ingestion          | `ingestion_service` + `seed_runner` + `POST /api/monitor/run` (checksum refresh) |
 | 4.7 Cross-cutting: source ingestion + extraction | Hybrid LLM + deterministic heuristics; checksum-based dedupe              |
 | §7 Functional: full traceability, citations    | Every Rule retains `source_id`, `source_url`, `source_snippet`              |
 | §7 Optional human review console               | `/api/review/*` + Review Queue page                                         |
@@ -316,6 +351,25 @@ To add more states, append entries to `sources.yaml` and re-run.
 | §9.7 Modular monolith, AI/LLM abstraction      | One FastAPI app; OpenAI-compatible client; swappable provider               |
 | §9.5 Confidence thresholds, exception routing  | `confidence_score` + `review_status ∈ {needs_review, auto_validated, …}`    |
 | §9.5 Self-host fallback, no LLM dependency     | Deterministic answer + rule-extraction fallbacks if `LLM_API_KEY` is unset  |
+
+## Smoke tests
+
+From an empty DB (`DEMO_MODE=false`), after `uvicorn` is up:
+
+```bash
+# No sources yet — monitor returns zero items
+curl -s -X POST http://localhost:8000/api/monitor/run \
+  -H 'Content-Type: application/json' -d '{}' | jq .
+
+# Ingest a manual row (no URL), then monitor — one item with status "skipped"
+curl -s -X POST http://localhost:8000/api/ingest/source \
+  -H 'Content-Type: application/json' \
+  -d '{"source_type":"manual","title":"Test","state":"California","tax_type":"sales_tax","text":"Sample."}'
+curl -s -X POST http://localhost:8000/api/monitor/run \
+  -H 'Content-Type: application/json' -d '{}' | jq .
+```
+
+Frontend typecheck: `cd frontend && npx tsc --noEmit`
 
 ## Design notes
 
@@ -351,8 +405,9 @@ To add more states, append entries to `sources.yaml` and re-run.
 
 - pgvector embeddings + hybrid retrieval (BM25 + vector)
 - Playwright-based ingestion for portals with JS / login walls
-- Change detection: page-level hashing + embedding distance, with
-  impact analysis on rules referencing changed passages
+- Change detection: `POST /api/monitor/run` re-fetches URLs, compares
+  checksums, and re-ingests when content changes (embedding distance and
+  page-level diff are future work)
 - Multi-tenant row-level security and SSO (OIDC/SAML)
 - Outcome-feedback loop: link rejection codes back to the rule that
   applied at submission time (§4.4 of the brief)

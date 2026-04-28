@@ -532,3 +532,114 @@ def ingest_upload(
     except Exception as exc:
         _mark_failed(db, source, f"{type(exc).__name__}: {exc}")
         raise
+
+
+def refresh_monitored_source(
+    db: Session,
+    source: models.Source,
+    *,
+    auto_extract: bool = True,
+) -> dict:
+    """Re-fetch a URL-backed source (Phase 11 — change monitoring).
+
+    * **unchanged** — same checksum → ``last_checked`` only.
+    * **updated** — content changed → ``SourceVersion`` snapshot, chunk
+      replacement, **existing rules deleted**, optional re-extraction,
+      vector reindex.
+    * **skipped_no_url** — paste/upload/manual entries with no http URL;
+      only ``last_checked`` is bumped.
+    * **failed** — fetch or processing error; source marked ``failed``.
+    """
+    fetch = (source.canonical_url or source.url or "").strip()
+    if not fetch.lower().startswith("http"):
+        now = datetime.utcnow()
+        source.last_checked = now
+        db.commit()
+        db.refresh(source)
+        return {
+            "outcome": "skipped_no_url",
+            "source_id": source.id,
+            "chunks": 0,
+            "rules": 0,
+        }
+
+    try:
+        payload = extract_url_payload(fetch)
+    except Exception as exc:
+        logger.warning("Monitor fetch failed for %s: %s", source.id, exc)
+        _mark_failed(db, source, f"{type(exc).__name__}: {exc}")
+        return {
+            "outcome": "failed",
+            "source_id": source.id,
+            "error": str(exc),
+            "chunks": 0,
+            "rules": 0,
+        }
+
+    text = payload["text"]
+    title = payload["title"]
+    canonical = payload["canonical_url"]
+    src_type = payload["source_type"]
+    new_checksum = compute_checksum(text)
+    now = datetime.utcnow()
+
+    if new_checksum == (source.checksum or ""):
+        source.last_checked = now
+        db.commit()
+        db.refresh(source)
+        return {
+            "outcome": "unchanged",
+            "source_id": source.id,
+            "chunks": 0,
+            "rules": 0,
+        }
+
+    versioning.capture_source_version(db, source, reason="content_changed")
+    source.raw_text = text[:MAX_TEXT_CHARS]
+    source.checksum = new_checksum
+    source.canonical_url = canonical
+    if title:
+        source.name = title[:512]
+    source.last_checked = now
+    source.last_changed = now
+    source.status = "processing"
+    source.error_message = None
+    source.source_type = src_type
+    db.flush()
+
+    db.query(models.Rule).filter(models.Rule.source_id == source.id).delete(
+        synchronize_session=False
+    )
+
+    try:
+        chunks_n = _replace_chunks(db, source, text)
+        rules_n = 0
+        ext_method: Optional[str] = None
+        if auto_extract:
+            rules_n, ext_method = extraction_service.extract_rules_for_source(
+                db, source
+            )
+        source.status = "processed"
+        db.commit()
+        db.refresh(source)
+        try:
+            vector_store.index_chunks(db, source, replace=True)
+        except Exception as exc:
+            logger.warning("Vector reindex failed: %s", exc)
+        return {
+            "outcome": "updated",
+            "source_id": source.id,
+            "chunks": chunks_n,
+            "rules": rules_n,
+            "extraction_method": ext_method,
+        }
+    except Exception as exc:
+        logger.exception("Monitor re-ingest failed for %s", source.id)
+        _mark_failed(db, source, f"{type(exc).__name__}: {exc}")
+        return {
+            "outcome": "failed",
+            "source_id": source.id,
+            "error": str(exc),
+            "chunks": 0,
+            "rules": 0,
+        }

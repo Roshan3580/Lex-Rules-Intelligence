@@ -401,6 +401,14 @@ class IngestRunRequest(BaseModel):
     auto_extract: bool = True
 
 
+class MonitorRunRequest(BaseModel):
+    """POST /api/monitor/run — optional filter and caps."""
+
+    source_ids: Optional[list[str]] = None
+    limit: int = 50
+    auto_extract: bool = True
+
+
 class IngestRunItem(BaseModel):
     """Per-source row inside an ingestion run."""
 
@@ -410,7 +418,7 @@ class IngestRunItem(BaseModel):
     tax_type: Optional[str] = None
     source_id: Optional[str] = None
     source_type: Optional[str] = None
-    status: str  # ingested | duplicate | failed | updated | crawled
+    status: str  # ingested | duplicate | failed | updated | unchanged | skipped | crawled
     chunks_created: int = 0
     rules_created: int = 0
     extraction_method: Optional[str] = None

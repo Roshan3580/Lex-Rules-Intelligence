@@ -77,12 +77,13 @@ def record_item(
     db.add(item)
 
     run.total += 1
-    if status == "ingested" or status == "updated":
+    if status in ("ingested", "updated"):
         run.ingested += 1
     elif status == "duplicate":
         run.duplicates += 1
     elif status == "failed":
         run.errors += 1
+    # unchanged | skipped | crawled: only bump total
     db.flush()
     return item
 
