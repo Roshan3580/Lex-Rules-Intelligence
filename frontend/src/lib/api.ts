@@ -422,7 +422,152 @@ export const api = {
     }),
   ruleEvents: (id: string) =>
     request<ReviewEvent[]>(`/api/review/rules/${id}/events`),
+
+  // Workflows (Phase 7)
+  workflowTemplates: (params?: { state?: string; tax_category?: TaxType | string }) => {
+    const q = new URLSearchParams();
+    if (params?.state) q.set("state", params.state);
+    if (params?.tax_category) q.set("tax_category", params.tax_category as string);
+    const qs = q.toString();
+    return request<WorkflowTemplate[]>(
+      `/api/workflows/templates${qs ? `?${qs}` : ""}`,
+    );
+  },
+  workflowTemplate: (
+    id: string,
+    params?: { state?: string; tax_category?: TaxType | string },
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.state) q.set("state", params.state);
+    if (params?.tax_category) q.set("tax_category", params.tax_category as string);
+    const qs = q.toString();
+    return request<WorkflowTemplate>(
+      `/api/workflows/templates/${id}${qs ? `?${qs}` : ""}`,
+    );
+  },
+  createCase: (payload: {
+    state?: string;
+    tax_category?: TaxType | string;
+    title?: string;
+    org?: string;
+    template_id?: string;
+    case_id?: string;
+    actor?: string;
+  }) =>
+    request<CaseWorkflow>("/api/workflows/cases", {
+      method: "POST",
+      json: payload,
+    }),
+  listCases: (params?: {
+    state?: string;
+    tax_category?: TaxType | string;
+    status?: string;
+    limit?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.state) q.set("state", params.state);
+    if (params?.tax_category) q.set("tax_category", params.tax_category as string);
+    if (params?.status) q.set("status", params.status);
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return request<CaseWorkflow[]>(`/api/workflows/cases${qs ? `?${qs}` : ""}`);
+  },
+  getCase: (id: string) => request<CaseWorkflow>(`/api/workflows/cases/${id}`),
+  updateCaseStep: (
+    id: string,
+    payload: { step_key: string; completed?: boolean; notes?: string; actor?: string },
+  ) =>
+    request<CaseWorkflow>(`/api/workflows/cases/${id}/steps`, {
+      method: "PATCH",
+      json: payload,
+    }),
 };
+
+export interface WorkflowChecklistItem {
+  key: string;
+  label: string;
+  checked?: boolean | null;
+}
+
+export interface WorkflowRuleSummary {
+  id: string;
+  rule_title: string;
+  rule_summary?: string | null;
+  tax_category?: string | null;
+  state?: string | null;
+  workflow_stage?: string | null;
+  required_forms?: string[];
+  required_documentation?: string[];
+  deadlines?: string[];
+  exceptions?: string[];
+  submission_method?: string | null;
+  source_url?: string | null;
+  confidence_score?: number | null;
+  review_status?: string | null;
+}
+
+export interface WorkflowStep {
+  key: string;
+  title: string;
+  description?: string | null;
+  workflow_stage?: string | null;
+  checklist: WorkflowChecklistItem[];
+  rules: WorkflowRuleSummary[];
+  rule_count?: number | null;
+  aggregated_forms?: string[];
+  aggregated_documents?: string[];
+  aggregated_deadlines?: string[];
+  aggregated_validations?: string[];
+  status?: "pending" | "complete" | "active" | string | null;
+  completed_at?: string | null;
+  notes?: string | null;
+}
+
+export interface WorkflowTemplate {
+  id: string;
+  key: string;
+  title: string;
+  description?: string | null;
+  state?: string | null;
+  tax_category?: string | null;
+  workflow_stage?: string | null;
+  is_builtin: boolean;
+  steps: WorkflowStep[];
+  required_rule_filters?: Record<string, unknown>[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CaseWorkflowEvent {
+  id: string;
+  action: string;
+  step_key?: string | null;
+  actor?: string | null;
+  notes?: string | null;
+  payload?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface CaseWorkflow {
+  id: string;
+  case_id: string;
+  title?: string | null;
+  org?: string | null;
+  template_id?: string | null;
+  state?: string | null;
+  tax_category?: string | null;
+  current_stage?: string | null;
+  status: "active" | "completed" | "abandoned" | string;
+  steps: WorkflowStep[];
+  completed_steps: string[];
+  step_count: number;
+  completed_count: number;
+  progress: number;
+  events?: CaseWorkflowEvent[];
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
 
 export const TAX_TYPES: { value: TaxType; label: string }[] = [
   { value: "sales_tax", label: "Sales tax" },

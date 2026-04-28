@@ -455,5 +455,113 @@ class IngestionRunDetail(IngestionRunOut):
     items: list[IngestRunItem] = []
 
 
+# ---------------------------------------------------------------------------
+# Workflow guidance (Phase 7)
+# ---------------------------------------------------------------------------
+
+
+class WorkflowChecklistItem(BaseModel):
+    key: str
+    label: str
+    checked: Optional[bool] = None
+
+
+class WorkflowRuleSummary(BaseModel):
+    id: str
+    rule_title: str
+    rule_summary: Optional[str] = None
+    tax_category: Optional[str] = None
+    state: Optional[str] = None
+    workflow_stage: Optional[str] = None
+    required_forms: list[str] = []
+    required_documentation: list[str] = []
+    deadlines: list[str] = []
+    exceptions: list[str] = []
+    submission_method: Optional[str] = None
+    source_url: Optional[str] = None
+    confidence_score: Optional[float] = None
+    review_status: Optional[str] = None
+
+
+class WorkflowStep(BaseModel):
+    key: str
+    title: str
+    description: Optional[str] = None
+    workflow_stage: Optional[str] = None
+    checklist: list[WorkflowChecklistItem] = []
+    rules: list[WorkflowRuleSummary] = []
+    rule_count: Optional[int] = None
+    aggregated_forms: list[str] = []
+    aggregated_documents: list[str] = []
+    aggregated_deadlines: list[str] = []
+    aggregated_validations: list[str] = []
+    status: Optional[str] = None
+    completed_at: Optional[datetime] = None
+    notes: Optional[str] = None
+
+
+class WorkflowTemplateOut(BaseModel):
+    id: str
+    key: str
+    title: str
+    description: Optional[str] = None
+    state: Optional[str] = None
+    tax_category: Optional[str] = None
+    workflow_stage: Optional[str] = None
+    is_builtin: bool = True
+    steps: list[WorkflowStep] = []
+    required_rule_filters: list[dict[str, Any]] = []
+    created_at: datetime
+    updated_at: datetime
+
+
+class CaseWorkflowEventOut(BaseModel):
+    id: str
+    action: str
+    step_key: Optional[str] = None
+    actor: Optional[str] = None
+    notes: Optional[str] = None
+    payload: Optional[dict[str, Any]] = None
+    created_at: datetime
+
+
+class CaseWorkflowOut(BaseModel):
+    id: str
+    case_id: str
+    title: Optional[str] = None
+    org: Optional[str] = None
+    template_id: Optional[str] = None
+    state: Optional[str] = None
+    tax_category: Optional[str] = None
+    current_stage: Optional[str] = None
+    status: str
+    steps: list[WorkflowStep] = []
+    completed_steps: list[str] = []
+    step_count: int = 0
+    completed_count: int = 0
+    progress: float = 0.0
+    events: list[CaseWorkflowEventOut] = []
+    created_at: datetime
+    updated_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class CreateCaseRequest(BaseModel):
+    state: Optional[str] = None
+    tax_category: Optional[str] = None
+    title: Optional[str] = None
+    org: Optional[str] = None
+    template_id: Optional[str] = None
+    case_id: Optional[str] = None
+    actor: Optional[str] = None
+
+
+class UpdateStepRequest(BaseModel):
+    step_key: str
+    completed: Optional[bool] = None
+    notes: Optional[str] = None
+    actor: Optional[str] = None
+
+
 SourceDetail.model_rebuild()
 QueryResponse.model_rebuild()

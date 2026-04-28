@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import SessionLocal, init_db
-from .routers import ingest, meta, questions, review, rules, sources
+from .routers import ingest, meta, questions, review, rules, sources, workflows
 from .schemas import HealthOut
 from .seed import seed_if_empty
 
@@ -52,10 +52,15 @@ def create_app() -> FastAPI:
     app.include_router(questions.router)
     app.include_router(review.router)
     app.include_router(ingest.router)
+    app.include_router(workflows.router)
 
     @app.on_event("startup")
     def _startup() -> None:
         init_db()
+        with SessionLocal() as db:
+            from .services import workflows_service
+
+            workflows_service.ensure_default_templates(db)
         if settings.demo_mode:
             with SessionLocal() as db:
                 inserted = seed_if_empty(db)

@@ -358,3 +358,118 @@ class RuleVersion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     rule: Mapped[Rule] = relationship(back_populates="versions")
+
+
+# ---------------------------------------------------------------------------
+# Workflow guidance (Phase 7)
+# ---------------------------------------------------------------------------
+
+
+class WorkflowTemplate(Base):
+    """Reusable workflow definition for a (state, tax_category) pair.
+
+    A template's `steps` is a list of stage dicts:
+        {
+            "key": "intake",
+            "title": "Intake",
+            "description": "...",
+            "workflow_stage": "intake",
+            "checklist": [
+                {"key": "register", "label": "Register with state authority"},
+                ...
+            ]
+        }
+
+    `required_rule_filters` is an optional list of rule filters the
+    runtime resolver uses to attach live, source-backed rules to each
+    stage at case-creation time. Example:
+        [{"workflow_stage": "intake"}, {"workflow_stage": "verification"}]
+    """
+
+    __tablename__ = "workflow_templates"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    key: Mapped[str] = mapped_column(String(128), index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    state: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    tax_category: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    workflow_stage: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+    steps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    required_rule_filters: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(
+        JSON, nullable=True
+    )
+
+    is_builtin: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+    cases: Mapped[list["CaseWorkflow"]] = relationship(
+        back_populates="template", cascade="all, delete-orphan"
+    )
+
+
+class CaseWorkflow(Base):
+    """Per-case instantiation of a `WorkflowTemplate`.
+
+    `steps` is a snapshot of the template's steps at creation time, with
+    each step augmented with runtime fields (`status`, `completed_at`,
+    `notes`, `attached_rule_ids`). Mutations should go through the
+    workflows service so the audit trail is kept consistent.
+    """
+
+    __tablename__ = "case_workflows"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    case_id: Mapped[str] = mapped_column(String(64), index=True)
+    org: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    template_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("workflow_templates.id", ondelete="SET NULL"), nullable=True
+    )
+
+    state: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    tax_category: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+
+    current_stage: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="active")
+    # active | completed | abandoned
+
+    steps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    completed_steps: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    template: Mapped[Optional[WorkflowTemplate]] = relationship(back_populates="cases")
+    events: Mapped[list["CaseWorkflowEvent"]] = relationship(
+        back_populates="case", cascade="all, delete-orphan",
+        order_by="CaseWorkflowEvent.created_at.asc()",
+    )
+
+
+class CaseWorkflowEvent(Base):
+    """Append-only audit trail for case progress.
+
+    Captures actor, action (start/complete_step/uncomplete_step/note/finish),
+    and a payload snapshot so changes are reversible / inspectable later.
+    """
+
+    __tablename__ = "case_workflow_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    case_workflow_id: Mapped[str] = mapped_column(
+        ForeignKey("case_workflows.id", ondelete="CASCADE"), index=True
+    )
+    action: Mapped[str] = mapped_column(String(64))
+    step_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    actor: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    payload: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+    case: Mapped[CaseWorkflow] = relationship(back_populates="events")
