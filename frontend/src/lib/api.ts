@@ -105,6 +105,29 @@ export interface DashboardResponse {
   alerts: DashboardAlert[];
 }
 
+export interface AnalyticsSummary {
+  total_rules: number;
+  total_sources: number;
+  published_rules: number;
+  rules_in_review: number;
+  rules_created_in_window: number;
+  source_content_changes_in_window: number;
+  review_events_in_window: number;
+}
+
+export interface AnalyticsResponse {
+  rules_by_state: { state: string; count: number }[];
+  rules_by_tax_category: { category: string; count: number }[];
+  confidence_distribution: { label: string; count: number }[];
+  sources_by_status: Record<string, number>;
+  extraction_methods: { method: string; count: number }[];
+  rules_created_by_day: { date: string; count: number }[];
+  review_events_by_day: { date: string; count: number }[];
+  source_freshness: { bucket: string; label: string; count: number }[];
+  window_days: number;
+  summary: AnalyticsSummary;
+}
+
 export interface ReviewAuditEvent {
   id: string;
   rule_id: string;
@@ -430,6 +453,11 @@ export const api = {
   dashboard: (activityLimit?: number) =>
     request<DashboardResponse>(
       `/api/dashboard${activityLimit != null ? `?activity_limit=${activityLimit}` : ""}`,
+    ),
+
+  analytics: (days?: number) =>
+    request<AnalyticsResponse>(
+      `/api/analytics${days != null ? `?days=${days}` : ""}`,
     ),
 
   states: () => request<StateOut[]>("/api/states"),

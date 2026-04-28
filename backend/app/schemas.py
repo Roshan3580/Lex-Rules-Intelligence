@@ -551,6 +551,65 @@ class DashboardOut(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Analytics (Phase 10)
+# ---------------------------------------------------------------------------
+
+
+class AnalyticsStateRow(BaseModel):
+    state: str
+    count: int
+
+
+class AnalyticsCategoryRow(BaseModel):
+    category: str
+    count: int
+
+
+class AnalyticsLabelCount(BaseModel):
+    label: str
+    count: int
+
+
+class AnalyticsMethodRow(BaseModel):
+    method: str
+    count: int
+
+
+class AnalyticsDayCount(BaseModel):
+    date: str
+    count: int
+
+
+class AnalyticsFreshnessRow(BaseModel):
+    bucket: str
+    label: str
+    count: int
+
+
+class AnalyticsSummaryOut(BaseModel):
+    total_rules: int
+    total_sources: int
+    published_rules: int
+    rules_in_review: int
+    rules_created_in_window: int
+    source_content_changes_in_window: int
+    review_events_in_window: int
+
+
+class AnalyticsOut(BaseModel):
+    rules_by_state: list[AnalyticsStateRow]
+    rules_by_tax_category: list[AnalyticsCategoryRow]
+    confidence_distribution: list[AnalyticsLabelCount]
+    sources_by_status: dict[str, int]
+    extraction_methods: list[AnalyticsMethodRow]
+    rules_created_by_day: list[AnalyticsDayCount]
+    review_events_by_day: list[AnalyticsDayCount]
+    source_freshness: list[AnalyticsFreshnessRow]
+    window_days: int
+    summary: AnalyticsSummaryOut
+
+
+# ---------------------------------------------------------------------------
 # Workflow guidance (Phase 7)
 # ---------------------------------------------------------------------------
 
