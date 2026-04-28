@@ -455,6 +455,55 @@ class IngestionRunDetail(IngestionRunOut):
     items: list[IngestRunItem] = []
 
 
+class AdminRoleOut(BaseModel):
+    """Placeholder RBAC role until real identity is wired."""
+
+    id: str
+    label: str
+    description: str
+
+
+class AdminTaxonomyOut(BaseModel):
+    states: list[StateOut]
+    tax_categories: list[str]
+    workflow_stages: list[str]
+    source_types: list[str]
+    review_statuses: list[str]
+
+
+class AdminSummaryOut(BaseModel):
+    total_sources: int
+    total_rules: int
+    published_rules: int
+    rules_in_review: int
+    failed_sources: int
+    avg_confidence: float
+    extraction_breakdown: dict[str, int] = {}
+    last_ingestion_run: Optional[dict[str, Any]] = None
+    llm_enabled: bool
+    retrieval_mode: str = "lexical"
+    embedding_provider: str = "none"
+    vector_index_size: int = 0
+
+
+class ReviewAuditEventOut(BaseModel):
+    """One row in the global review audit feed."""
+
+    id: str
+    rule_id: str
+    rule_title: str
+    state: str
+    tax_category: str
+    action: str
+    actor: Optional[str] = None
+    notes: Optional[str] = None
+    diff: Optional[dict[str, Any]] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ---------------------------------------------------------------------------
 # Workflow guidance (Phase 7)
 # ---------------------------------------------------------------------------

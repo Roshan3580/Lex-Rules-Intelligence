@@ -26,6 +26,79 @@ export interface StateOut {
   abbreviation: string;
 }
 
+export interface AdminRole {
+  id: string;
+  label: string;
+  description: string;
+}
+
+export interface AdminTaxonomy {
+  states: StateOut[];
+  tax_categories: string[];
+  workflow_stages: string[];
+  source_types: string[];
+  review_statuses: string[];
+}
+
+export interface AdminSummary {
+  total_sources: number;
+  total_rules: number;
+  published_rules: number;
+  rules_in_review: number;
+  failed_sources: number;
+  avg_confidence: number;
+  extraction_breakdown: Record<string, number>;
+  last_ingestion_run: {
+    id: string;
+    kind: string;
+    status: string;
+    started_at: string;
+    finished_at: string | null;
+    total: number;
+    ingested: number;
+    errors: number;
+  } | null;
+  llm_enabled: boolean;
+  retrieval_mode: string;
+  embedding_provider: string;
+  vector_index_size: number;
+}
+
+export interface ReviewAuditEvent {
+  id: string;
+  rule_id: string;
+  rule_title: string;
+  state: string;
+  tax_category: string;
+  action: string;
+  actor: string | null;
+  notes: string | null;
+  diff: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export type AppRoleId = "admin" | "reviewer" | "readonly";
+
+const ROLE_STORAGE_KEY = "rules_intel_app_role";
+
+export function getAppRole(): AppRoleId {
+  try {
+    const v = localStorage.getItem(ROLE_STORAGE_KEY);
+    if (v === "admin" || v === "reviewer" || v === "readonly") return v;
+  } catch {
+    /* ignore */
+  }
+  return "admin";
+}
+
+export function setAppRole(role: AppRoleId): void {
+  try {
+    localStorage.setItem(ROLE_STORAGE_KEY, role);
+  } catch {
+    /* ignore */
+  }
+}
+
 export interface Rule {
   id: string;
   state: string;
@@ -305,6 +378,14 @@ async function request<T>(
 export const api = {
   health: () => request<Health>("/health"),
 
+  adminRoles: () => request<AdminRole[]>("/api/admin/roles"),
+  adminTaxonomy: () => request<AdminTaxonomy>("/api/admin/taxonomy"),
+  adminSummary: () => request<AdminSummary>("/api/admin/summary"),
+  adminAudit: (limit?: number) =>
+    request<ReviewAuditEvent[]>(
+      `/api/admin/audit${limit != null ? `?limit=${limit}` : ""}`,
+    ),
+
   states: () => request<StateOut[]>("/api/states"),
 
   query: (payload: {
@@ -414,7 +495,11 @@ export const api = {
   reviewQueue: () => request<Rule[]>("/api/review/queue"),
   reviewAction: (
     id: string,
-    payload: { action: "approve" | "reject" | "publish" | "needs_review"; notes?: string }
+    payload: {
+      action: "approve" | "reject" | "publish" | "needs_review";
+      notes?: string;
+      actor?: string;
+    },
   ) =>
     request<Rule>(`/api/review/rules/${id}/action`, {
       method: "POST",

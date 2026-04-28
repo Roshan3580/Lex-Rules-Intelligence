@@ -148,3 +148,18 @@ def list_events(db: Session, rule_id: str) -> list[models.ReviewEvent]:
         .order_by(models.ReviewEvent.created_at.desc())
         .all()
     )
+
+
+def list_all_events(
+    db: Session,
+    *,
+    limit: int = 100,
+) -> list[tuple[models.ReviewEvent, models.Rule]]:
+    """Global review audit trail for Admin / dashboard (newest first)."""
+    return (
+        db.query(models.ReviewEvent, models.Rule)
+        .join(models.Rule, models.ReviewEvent.rule_id == models.Rule.id)
+        .order_by(models.ReviewEvent.created_at.desc())
+        .limit(min(max(limit, 1), 500))
+        .all()
+    )
