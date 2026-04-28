@@ -11,6 +11,18 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    proxy: {
+      // Backend: dev server proxies /api/* and /health to FastAPI on :8000.
+      // Override with VITE_API_PROXY_TARGET in a .env if you change ports.
+      "/api": {
+        target: process.env.VITE_API_PROXY_TARGET || "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/health": {
+        target: process.env.VITE_API_PROXY_TARGET || "http://localhost:8000",
+        changeOrigin: true,
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

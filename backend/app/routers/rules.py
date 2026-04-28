@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api/rules", tags=["rules"])
 def list_rules(
     state: Optional[str] = None,
     tax_category: Optional[str] = None,
+    tax_type: Optional[str] = None,
     review_status: Optional[str] = None,
     limit: int = 200,
     db: Session = Depends(get_db),
@@ -25,7 +26,7 @@ def list_rules(
     rules = review_service.list_rules(
         db,
         state=state,
-        tax_category=tax_category,
+        tax_category=tax_category or tax_type,
         review_status=review_status,
         limit=limit,
     )

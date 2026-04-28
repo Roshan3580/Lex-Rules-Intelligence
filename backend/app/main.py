@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import SessionLocal, init_db
-from .routers import questions, review, rules, sources
+from .routers import ingest, meta, questions, review, rules, sources
 from .schemas import HealthOut
 from .seed import seed_if_empty
 
@@ -35,16 +35,23 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.frontend_origin, "http://localhost:5173"],
+        allow_origins=[
+            settings.frontend_origin,
+            "http://localhost:5173",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
+    app.include_router(meta.router)
     app.include_router(sources.router)
     app.include_router(rules.router)
     app.include_router(questions.router)
     app.include_router(review.router)
+    app.include_router(ingest.router)
 
     @app.on_event("startup")
     def _startup() -> None:

@@ -94,6 +94,7 @@ class IngestResult(BaseModel):
 class RuleBase(BaseModel):
     state: str
     tax_category: str
+    rule_category: Optional[str] = None
     rule_title: str
     rule_summary: str
     detailed_rule: Optional[str] = None
@@ -215,3 +216,85 @@ class HealthOut(BaseModel):
     status: str
     llm_enabled: bool
     database: str
+
+
+# ---------------------------------------------------------------------------
+# Spec-shaped DTOs (POST /api/query, /api/states, /api/ingest/*)
+# ---------------------------------------------------------------------------
+
+
+class QueryRequest(BaseModel):
+    """Spec-shaped request: matches the contract in the engineering brief."""
+
+    question: str = Field(..., min_length=1)
+    state: Optional[str] = None
+    tax_type: Optional[str] = None  # synonym of tax_category
+    top_k: int = 6
+
+
+class QuerySource(BaseModel):
+    title: str
+    url: Optional[str] = None
+    snippet: str
+    document_type: str  # webpage | pdf | manual | form | bulletin | rule
+    last_checked: Optional[datetime] = None
+    state: Optional[str] = None
+    tax_type: Optional[str] = None
+    relevance: float = 0.0
+
+
+class QueryResponse(BaseModel):
+    """Spec-shaped Q&A response."""
+
+    answer: str
+    state: Optional[str] = None
+    tax_type: Optional[str] = None
+    sources: list[QuerySource]
+    confidence: float
+    method: str  # llm | fallback
+    rules_used: list["RuleOut"]
+    question_id: str
+    answered_at: datetime
+
+
+class StateOut(BaseModel):
+    name: str
+    abbreviation: str
+
+
+class IngestSourceRequest(BaseModel):
+    """POST /api/ingest/source — unified URL/manual ingestion entry point."""
+
+    source_type: str = Field(default="webpage")  # webpage | url | manual | text | pdf
+    url: Optional[str] = None
+    title: Optional[str] = None
+    text: Optional[str] = None
+    state: Optional[str] = None
+    tax_type: Optional[str] = None
+    auto_extract: bool = True
+
+
+class IngestRunRequest(BaseModel):
+    only_state: Optional[str] = None
+    only_tax_type: Optional[str] = None
+    auto_extract: bool = True
+
+
+class IngestRunItem(BaseModel):
+    name: str
+    url: Optional[str] = None
+    state: Optional[str] = None
+    tax_type: Optional[str] = None
+    status: str
+    chunks_created: int = 0
+    rules_created: int = 0
+    extraction_method: Optional[str] = None
+    error: Optional[str] = None
+
+
+class IngestRunResult(BaseModel):
+    total: int
+    ingested: int
+    duplicates: int
+    errors: int
+    items: list[IngestRunItem]

@@ -12,3 +12,4 @@ pdfplumber==0.11.4
 pymupdf==1.24.10
 httpx==0.27.2
 psycopg2-binary==2.9.9
+pyyaml==6.0.2

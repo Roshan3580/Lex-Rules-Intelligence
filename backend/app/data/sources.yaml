@@ -1,0 +1,83 @@
+# Curated seed list of official state tax sources used by /api/ingest/run.
+#
+# Each entry is fetched, cleaned, chunked, and run through rule extraction.
+# Already-ingested sources are skipped via SHA-256 checksum.
+#
+# Add more entries here as you onboard new states. Prefer authoritative
+# state-government domains (.gov, .ca.gov, etc).
+
+sources:
+  # ---------------------------- California -----------------------------
+  - name: "CDTFA — Sales and Use Tax in California"
+    url: "https://www.cdtfa.ca.gov/taxes-and-fees/sutprograms.htm"
+    state: "California"
+    tax_type: "sales_tax"
+    source_type: "webpage"
+
+  - name: "CDTFA — Filing Dates for Sales & Use Tax Returns"
+    url: "https://www.cdtfa.ca.gov/taxes-and-fees/filing-dates.htm"
+    state: "California"
+    tax_type: "sales_tax"
+    source_type: "webpage"
+
+  - name: "EDD — Required Filings and Due Dates"
+    url: "https://edd.ca.gov/en/payroll_taxes/required_filings_and_due_dates/"
+    state: "California"
+    tax_type: "payroll_tax"
+    source_type: "webpage"
+
+  - name: "FTB — Corporations Filing Information"
+    url: "https://www.ftb.ca.gov/file/business/types/corporations/index.html"
+    state: "California"
+    tax_type: "corporate_tax"
+    source_type: "webpage"
+
+  # ----------------------------- New York ------------------------------
+  - name: "NYS Tax — Sales and Use Tax for Businesses"
+    url: "https://www.tax.ny.gov/bus/st/stidx.htm"
+    state: "New York"
+    tax_type: "sales_tax"
+    source_type: "webpage"
+
+  - name: "NYS Tax — Sales Tax Filing Requirements"
+    url: "https://www.tax.ny.gov/bus/st/file_sales_tax_returns.htm"
+    state: "New York"
+    tax_type: "sales_tax"
+    source_type: "webpage"
+
+  - name: "NYS Tax — Withholding Tax for Employers"
+    url: "https://www.tax.ny.gov/bus/wt/whtidx.htm"
+    state: "New York"
+    tax_type: "withholding"
+    source_type: "webpage"
+
+  - name: "NYS Tax — Corporation Tax Resource Center"
+    url: "https://www.tax.ny.gov/bus/ct/ctidx.htm"
+    state: "New York"
+    tax_type: "corporate_tax"
+    source_type: "webpage"
+
+  # ------------------------------ Texas --------------------------------
+  - name: "Texas Comptroller — Sales and Use Tax"
+    url: "https://comptroller.texas.gov/taxes/sales/"
+    state: "Texas"
+    tax_type: "sales_tax"
+    source_type: "webpage"
+
+  - name: "Texas Comptroller — Sales Tax Filing Due Dates"
+    url: "https://comptroller.texas.gov/taxes/file-pay/due-dates.php"
+    state: "Texas"
+    tax_type: "sales_tax"
+    source_type: "webpage"
+
+  - name: "Texas Comptroller — Franchise Tax"
+    url: "https://comptroller.texas.gov/taxes/franchise/"
+    state: "Texas"
+    tax_type: "franchise_tax"
+    source_type: "webpage"
+
+  - name: "Texas Workforce Commission — Unemployment Tax"
+    url: "https://www.twc.texas.gov/businesses/unemployment-tax"
+    state: "Texas"
+    tax_type: "payroll_tax"
+    source_type: "webpage"

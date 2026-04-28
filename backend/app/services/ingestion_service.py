@@ -8,10 +8,12 @@ auto-extraction.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import logging
 import os
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -100,6 +102,18 @@ def extract_url_text(url: str, timeout: float = 20.0) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 
+def compute_checksum(text: str) -> str:
+    return hashlib.sha256((text or "").encode("utf-8", errors="ignore")).hexdigest()
+
+
+def find_source_by_checksum(db: Session, checksum: str) -> Optional[models.Source]:
+    return (
+        db.query(models.Source)
+        .filter(models.Source.checksum == checksum)
+        .first()
+    )
+
+
 def _persist_chunks(
     db: Session,
     source: models.Source,
@@ -148,14 +162,29 @@ def ingest_text(
     state: Optional[str] = None,
     tax_category: Optional[str] = None,
     auto_extract: bool = True,
+    skip_if_duplicate: bool = False,
+    url: Optional[str] = None,
+    source_type: str = "text",
 ) -> tuple[models.Source, int, int, str]:
+    checksum = compute_checksum(text)
+    if skip_if_duplicate:
+        existing = find_source_by_checksum(db, checksum)
+        if existing is not None:
+            existing.last_checked = datetime.utcnow()
+            db.commit()
+            db.refresh(existing)
+            return existing, 0, 0, "duplicate"
+
     source = models.Source(
-        source_type="text",
+        source_type=source_type,
         name=name,
+        url=url,
         state=state,
         tax_category=tax_category,
         raw_text=text[:MAX_TEXT_CHARS],
         status="ingested",
+        checksum=checksum,
+        last_checked=datetime.utcnow(),
     )
     db.add(source)
     db.flush()
@@ -175,8 +204,19 @@ def ingest_url(
     tax_category: Optional[str] = None,
     name: Optional[str] = None,
     auto_extract: bool = True,
+    skip_if_duplicate: bool = True,
 ) -> tuple[models.Source, int, int, str]:
     title, text = extract_url_text(url)
+    checksum = compute_checksum(text)
+
+    if skip_if_duplicate:
+        existing = find_source_by_checksum(db, checksum)
+        if existing is not None:
+            existing.last_checked = datetime.utcnow()
+            db.commit()
+            db.refresh(existing)
+            return existing, 0, 0, "duplicate"
+
     source = models.Source(
         source_type="url",
         name=name or title or url,
@@ -185,6 +225,8 @@ def ingest_url(
         tax_category=tax_category,
         raw_text=text[:MAX_TEXT_CHARS],
         status="ingested",
+        checksum=checksum,
+        last_checked=datetime.utcnow(),
     )
     db.add(source)
     db.flush()
@@ -204,6 +246,7 @@ def ingest_upload(
     state: Optional[str] = None,
     tax_category: Optional[str] = None,
     auto_extract: bool = True,
+    skip_if_duplicate: bool = True,
 ) -> tuple[models.Source, int, int, str]:
     if len(data) > MAX_BYTES:
         raise ValueError(f"File too large: {len(data)} bytes (max {MAX_BYTES})")
@@ -228,13 +271,21 @@ def ingest_upload(
             text = soup.get_text(separator="\n", strip=True)
         source_type = "upload"
     else:
-        # Best-effort: try as utf-8, otherwise treat as PDF.
         try:
             text = data.decode("utf-8")
             source_type = "upload"
         except UnicodeDecodeError:
             text = extract_pdf_text(data)
             source_type = "pdf"
+
+    checksum = compute_checksum(text)
+    if skip_if_duplicate:
+        existing = find_source_by_checksum(db, checksum)
+        if existing is not None:
+            existing.last_checked = datetime.utcnow()
+            db.commit()
+            db.refresh(existing)
+            return existing, 0, 0, "duplicate"
 
     source = models.Source(
         source_type=source_type,
@@ -244,6 +295,8 @@ def ingest_upload(
         tax_category=tax_category,
         raw_text=text[:MAX_TEXT_CHARS],
         status="ingested",
+        checksum=checksum,
+        last_checked=datetime.utcnow(),
     )
     db.add(source)
     db.flush()
