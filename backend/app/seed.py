@@ -512,7 +512,7 @@ def seed_if_empty(db: Session) -> int:
             state=spec["state"],
             tax_category=None,
             raw_text=spec["text"],
-            status="ingested",
+            status="processed",
             meta={"seeded": True},
         )
         db.add(source)

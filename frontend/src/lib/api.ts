@@ -47,6 +47,8 @@ export interface Rule {
   confidence_score: number;
   review_status: ReviewStatus;
   extraction_method?: string | null;
+  current_version?: number;
+  supersedes_rule_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -74,19 +76,85 @@ export interface QueryResponse {
   answered_at: string;
 }
 
+export type SourceStatus =
+  | "pending"
+  | "processing"
+  | "processed"
+  | "failed"
+  | "skipped_duplicate";
+
 export interface SourceRow {
   id: string;
   source_type: string;
   name: string;
   url?: string | null;
+  canonical_url?: string | null;
   file_path?: string | null;
   state?: string | null;
   tax_category?: string | null;
-  status: string;
+  status: SourceStatus | string;
+  error_message?: string | null;
+  checksum?: string | null;
+  last_checked?: string | null;
+  last_changed?: string | null;
+  current_version?: number;
   created_at: string;
   updated_at: string;
   chunk_count: number;
   rule_count: number;
+}
+
+export interface RuleVersion {
+  id: string;
+  rule_id: string;
+  version: number;
+  previous_data?: Record<string, unknown> | null;
+  new_data?: Record<string, unknown> | null;
+  changed_fields?: string[] | null;
+  extraction_method?: string | null;
+  source_version_id?: string | null;
+  actor?: string | null;
+  notes?: string | null;
+  captured_reason?: string | null;
+  created_at: string;
+}
+
+export interface SourceVersion {
+  id: string;
+  source_id: string;
+  version: number;
+  checksum?: string | null;
+  canonical_url?: string | null;
+  title?: string | null;
+  raw_text_preview?: string | null;
+  status_at_capture?: string | null;
+  captured_reason?: string | null;
+  created_at: string;
+}
+
+export interface SourceChunk {
+  id: string;
+  chunk_index: number;
+  text: string;
+  page_number?: number | null;
+  url_section?: string | null;
+}
+
+export interface SourceDetail extends SourceRow {
+  raw_text_preview?: string | null;
+  meta?: Record<string, unknown> | null;
+  chunks: SourceChunk[];
+  rules: Rule[];
+}
+
+export interface LinkHealth {
+  url: string;
+  ok: boolean;
+  status_code?: number | null;
+  canonical_url?: string | null;
+  content_type?: string | null;
+  error?: string | null;
+  checked_at: string;
 }
 
 export interface IngestResult {
@@ -96,22 +164,57 @@ export interface IngestResult {
   extraction_method: string;
 }
 
+export type IngestRunItemStatus =
+  | "ingested"
+  | "duplicate"
+  | "failed"
+  | "updated"
+  | "crawled"
+  | "error";
+
+export interface IngestRunItem {
+  name?: string | null;
+  url?: string | null;
+  state?: string | null;
+  tax_type?: string | null;
+  source_id?: string | null;
+  source_type?: string | null;
+  status: IngestRunItemStatus;
+  chunks_created: number;
+  rules_created: number;
+  extraction_method?: string | null;
+  error?: string | null;
+  error_message?: string | null;
+  created_at?: string | null;
+}
+
 export interface IngestRunResult {
   total: number;
   ingested: number;
   duplicates: number;
   errors: number;
-  items: Array<{
-    name: string;
-    url?: string | null;
-    state?: string | null;
-    tax_type?: string | null;
-    status: "ingested" | "duplicate" | "error";
-    chunks_created: number;
-    rules_created: number;
-    extraction_method?: string | null;
-    error?: string | null;
-  }>;
+  items: IngestRunItem[];
+  run_id?: string | null;
+}
+
+export interface IngestionRunSummary {
+  id: string;
+  kind: string;
+  status: string;
+  triggered_by?: string | null;
+  only_state?: string | null;
+  only_tax_type?: string | null;
+  notes?: string | null;
+  total: number;
+  ingested: number;
+  duplicates: number;
+  errors: number;
+  started_at: string;
+  finished_at?: string | null;
+}
+
+export interface IngestionRunDetail extends IngestionRunSummary {
+  items: IngestRunItem[];
 }
 
 export interface ReviewEvent {
@@ -201,8 +304,10 @@ export const api = {
     state?: string;
     tax_type?: TaxType;
     auto_extract?: boolean;
+    crawl_depth?: number;
+    crawl_max_pages?: number;
   }) =>
-    request<IngestResult>("/api/ingest/source", {
+    request<IngestRunResult>("/api/ingest/source", {
       method: "POST",
       json: payload,
     }),
@@ -216,6 +321,26 @@ export const api = {
       method: "POST",
       json: payload ?? {},
     }),
+
+  ingestRuns: (limit?: number) =>
+    request<IngestionRunSummary[]>(
+      `/api/ingest/runs${limit ? `?limit=${limit}` : ""}`,
+    ),
+
+  ingestRunDetail: (id: string) =>
+    request<IngestionRunDetail>(`/api/ingest/runs/${id}`),
+
+  sourceDetail: (id: string) =>
+    request<SourceDetail>(`/api/sources/${id}`),
+
+  checkSource: (id: string) =>
+    request<LinkHealth>(`/api/sources/${id}/check`, { method: "POST" }),
+
+  ruleVersions: (id: string) =>
+    request<RuleVersion[]>(`/api/rules/${id}/versions`),
+
+  sourceVersions: (id: string) =>
+    request<SourceVersion[]>(`/api/sources/${id}/versions`),
 
   uploadFile: async (
     file: File,

@@ -26,8 +26,10 @@ import {
 type Status = "processed" | "pending" | "error";
 
 function statusFor(s: SourceRow): Status {
-  if (s.status === "ingested") return "processed";
-  if (s.status === "error") return "error";
+  // Backend status values: pending | processing | processed | failed |
+  // skipped_duplicate. We collapse to the 3 buckets the dashboard tracks.
+  if (s.status === "processed" || s.status === "ingested") return "processed";
+  if (s.status === "failed" || s.status === "error") return "error";
   return "pending";
 }
 
@@ -253,9 +255,9 @@ const Sources = () => {
                   <span className="font-medium truncate">{it.name}</span>
                   <span
                     className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                      it.status === "ingested"
+                      it.status === "ingested" || it.status === "updated"
                         ? "bg-success/10 text-success"
-                        : it.status === "duplicate"
+                        : it.status === "duplicate" || it.status === "crawled"
                           ? "bg-secondary text-muted-foreground"
                           : "bg-destructive/10 text-destructive"
                     }`}

@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..utils.llm_client import llm_client
+from . import versioning
 
 logger = logging.getLogger(__name__)
 
@@ -91,12 +92,42 @@ def extract_rules_for_source(
     if llm_client.enabled:
         try:
             count = _extract_with_llm(db, source, chunks)
-            return count, "llm"
+            method = "llm"
         except Exception as exc:  # pragma: no cover
             logger.warning("LLM extraction failed, falling back: %s", exc)
+            count = _extract_with_heuristics(db, source, chunks)
+            method = "heuristic"
+    else:
+        count = _extract_with_heuristics(db, source, chunks)
+        method = "heuristic"
 
-    count = _extract_with_heuristics(db, source, chunks)
-    return count, "heuristic"
+    _capture_initial_rule_versions(db, source)
+    return count, method
+
+
+def _capture_initial_rule_versions(db: Session, source: models.Source) -> None:
+    """Snapshot v1 of every rule on this source that doesn't have one yet."""
+    rules = db.query(models.Rule).filter(models.Rule.source_id == source.id).all()
+    source_version = versioning.latest_source_version(db, source.id)
+    sv_id = source_version.id if source_version is not None else None
+    for r in rules:
+        has_version = (
+            db.query(models.RuleVersion)
+            .filter(models.RuleVersion.rule_id == r.id)
+            .first()
+        )
+        if has_version is not None:
+            continue
+        versioning.capture_rule_version(
+            db,
+            r,
+            previous_data={},
+            new_data=versioning.serialize_rule(r),
+            reason="initial",
+            extraction_method=r.extraction_method,
+            source_version_id=sv_id,
+        )
+    db.flush()
 
 
 # ---------------------------------------------------------------------------

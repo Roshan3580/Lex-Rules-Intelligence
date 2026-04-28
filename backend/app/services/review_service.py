@@ -12,6 +12,7 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from . import versioning
 
 
 _VALID_ACTIONS = {"approve", "reject", "publish", "needs_review", "edit"}
@@ -61,6 +62,8 @@ def update_rule(
     if rule is None:
         raise LookupError(f"Rule {rule_id} not found")
 
+    previous_data = versioning.serialize_rule(rule)
+
     diff: dict[str, Any] = {}
     data = payload.model_dump(exclude_unset=True)
     for k, v in data.items():
@@ -77,6 +80,14 @@ def update_rule(
                 actor=actor,
                 diff=diff,
             )
+        )
+        versioning.capture_rule_version(
+            db,
+            rule,
+            previous_data=previous_data,
+            new_data=versioning.serialize_rule(rule),
+            reason="edit",
+            actor=actor,
         )
 
     db.commit()
@@ -104,6 +115,7 @@ def review_action(
 
     new_status = _ACTION_TO_STATUS[action]
     before = rule.review_status
+    previous_data = versioning.serialize_rule(rule)
     rule.review_status = new_status
 
     db.add(
@@ -114,6 +126,15 @@ def review_action(
             notes=notes,
             diff={"review_status": {"before": before, "after": new_status}},
         )
+    )
+    versioning.capture_rule_version(
+        db,
+        rule,
+        previous_data=previous_data,
+        new_data=versioning.serialize_rule(rule),
+        reason="review_action",
+        actor=actor,
+        notes=f"action={action}",
     )
     db.commit()
     db.refresh(rule)

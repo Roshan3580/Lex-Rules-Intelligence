@@ -48,7 +48,13 @@ class SourceBase(BaseModel):
 class SourceOut(SourceBase):
     id: str
     file_path: Optional[str] = None
-    status: str
+    canonical_url: Optional[str] = None
+    status: str  # pending | processing | processed | failed | skipped_duplicate
+    error_message: Optional[str] = None
+    checksum: Optional[str] = None
+    last_checked: Optional[datetime] = None
+    last_changed: Optional[datetime] = None
+    current_version: int = 1
     created_at: datetime
     updated_at: datetime
     chunk_count: int = 0
@@ -58,9 +64,32 @@ class SourceOut(SourceBase):
         from_attributes = True
 
 
+class SourceChunkOut(BaseModel):
+    id: str
+    chunk_index: int
+    text: str
+    page_number: Optional[int] = None
+    url_section: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class SourceDetail(SourceOut):
     raw_text_preview: Optional[str] = None
     meta: Optional[dict[str, Any]] = None
+    chunks: list[SourceChunkOut] = []
+    rules: list["RuleOut"] = []
+
+
+class LinkHealthOut(BaseModel):
+    url: str
+    ok: bool
+    status_code: Optional[int] = None
+    canonical_url: Optional[str] = None
+    content_type: Optional[str] = None
+    error: Optional[str] = None
+    checked_at: str
 
 
 class IngestUrlRequest(BaseModel):
@@ -139,8 +168,44 @@ class RuleOut(RuleBase):
     id: str
     source_id: Optional[str] = None
     extraction_method: Optional[str] = None
+    current_version: int = 1
+    supersedes_rule_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RuleVersionOut(BaseModel):
+    id: str
+    rule_id: str
+    version: int
+    previous_data: Optional[dict[str, Any]] = None
+    new_data: Optional[dict[str, Any]] = None
+    changed_fields: Optional[list[str]] = None
+    extraction_method: Optional[str] = None
+    source_version_id: Optional[str] = None
+    actor: Optional[str] = None
+    notes: Optional[str] = None
+    captured_reason: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SourceVersionOut(BaseModel):
+    id: str
+    source_id: str
+    version: int
+    checksum: Optional[str] = None
+    canonical_url: Optional[str] = None
+    title: Optional[str] = None
+    raw_text_preview: Optional[str] = None
+    status_at_capture: Optional[str] = None
+    captured_reason: Optional[str] = None
+    created_at: datetime
 
     class Config:
         from_attributes = True
@@ -273,6 +338,8 @@ class IngestSourceRequest(BaseModel):
     state: Optional[str] = None
     tax_type: Optional[str] = None
     auto_extract: bool = True
+    crawl_depth: int = 0  # 0 = just the URL; >0 = follow same-host links
+    crawl_max_pages: int = 5
 
 
 class IngestRunRequest(BaseModel):
@@ -282,20 +349,58 @@ class IngestRunRequest(BaseModel):
 
 
 class IngestRunItem(BaseModel):
-    name: str
+    """Per-source row inside an ingestion run."""
+
+    name: Optional[str] = None
     url: Optional[str] = None
     state: Optional[str] = None
     tax_type: Optional[str] = None
-    status: str
+    source_id: Optional[str] = None
+    source_type: Optional[str] = None
+    status: str  # ingested | duplicate | failed | updated | crawled
     chunks_created: int = 0
     rules_created: int = 0
     extraction_method: Optional[str] = None
     error: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class IngestRunResult(BaseModel):
+    """Synchronous response shape for /api/ingest/run and /api/ingest/source."""
+
     total: int
     ingested: int
     duplicates: int
     errors: int
     items: list[IngestRunItem]
+    run_id: Optional[str] = None
+
+
+class IngestionRunOut(BaseModel):
+    """Listing row for GET /api/ingest/runs."""
+
+    id: str
+    kind: str
+    status: str
+    triggered_by: Optional[str] = None
+    only_state: Optional[str] = None
+    only_tax_type: Optional[str] = None
+    notes: Optional[str] = None
+    total: int
+    ingested: int
+    duplicates: int
+    errors: int
+    started_at: datetime
+    finished_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class IngestionRunDetail(IngestionRunOut):
+    items: list[IngestRunItem] = []
+
+
+SourceDetail.model_rebuild()
+QueryResponse.model_rebuild()

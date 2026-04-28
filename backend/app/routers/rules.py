@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..services import review_service
+from ..services import review_service, versioning
 
 router = APIRouter(prefix="/api/rules", tags=["rules"])
 
@@ -64,6 +64,29 @@ def create_rule(payload: schemas.RuleCreate, db: Session = Depends(get_db)):
         extraction_method=payload.extraction_method or "manual",
     )
     db.add(rule)
+    db.flush()
+    versioning.capture_rule_version(
+        db,
+        rule,
+        previous_data={},
+        new_data=versioning.serialize_rule(rule),
+        reason="initial",
+        actor="api",
+    )
     db.commit()
     db.refresh(rule)
     return schemas.RuleOut.model_validate(rule)
+
+
+@router.get("/{rule_id}/versions", response_model=list[schemas.RuleVersionOut])
+def list_rule_versions(rule_id: str, db: Session = Depends(get_db)):
+    rule = review_service.get_rule(db, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    rows = (
+        db.query(models.RuleVersion)
+        .filter(models.RuleVersion.rule_id == rule_id)
+        .order_by(models.RuleVersion.version.desc())
+        .all()
+    )
+    return [schemas.RuleVersionOut.model_validate(r) for r in rows]
