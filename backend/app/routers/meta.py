@@ -6,6 +6,8 @@ from fastapi import APIRouter
 
 from .. import schemas
 from ..config import settings
+from ..services.embeddings import embedder
+from ..services.vector_store import vector_store
 
 router = APIRouter(tags=["meta"])
 
@@ -34,11 +36,17 @@ _US_STATES: list[tuple[str, str]] = [
 @router.get("/health", response_model=schemas.HealthOut)
 def health() -> schemas.HealthOut:
     """Top-level health probe (also exposed at /api/health)."""
+    vstats = vector_store.stats()
     return schemas.HealthOut(
         status="ok",
         llm_enabled=settings.llm_enabled,
         database=settings.database_url.split("://", 1)[0],
         demo_mode=settings.demo_mode,
+        embedding_provider=embedder.name,
+        embedding_enabled=embedder.enabled,
+        vector_backend=settings.vector_backend if settings.vector_enabled else "none",
+        vector_enabled=bool(vstats.get("enabled")),
+        vector_index_size=int(vstats.get("size") or 0),
     )
 
 

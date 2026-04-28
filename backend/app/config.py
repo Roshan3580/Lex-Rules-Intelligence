@@ -37,6 +37,24 @@ class Settings(BaseSettings):
     # an empty DB. Default is False — production starts empty.
     demo_mode: bool = False
 
+    # ------------------------------------------------------------------
+    # Embeddings / hybrid retrieval (Phase 5)
+    # ------------------------------------------------------------------
+    # `none`   — disable vectors, retrieval stays purely lexical.
+    # `openai` — call an OpenAI-compatible embeddings endpoint.
+    # `hash`   — deterministic hash-based embedding fallback (offline).
+    embedding_provider: str = "hash"
+    embedding_api_key: str = ""
+    embedding_base_url: str = "https://api.openai.com/v1"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dim: int = 384  # used by hash fallback
+
+    # Vector store backend. Today only `numpy` is implemented (in-process
+    # numpy matrix persisted to disk). pgvector / chroma slots are reserved
+    # for later phases.
+    vector_backend: str = "numpy"
+    vector_index_dir: str = "./.vector_index"
+
     @property
     def upload_path(self) -> Path:
         p = Path(self.upload_dir).resolve()
@@ -44,8 +62,29 @@ class Settings(BaseSettings):
         return p
 
     @property
+    def vector_index_path(self) -> Path:
+        p = Path(self.vector_index_dir).resolve()
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    @property
     def llm_enabled(self) -> bool:
         return bool(self.llm_api_key.strip())
+
+    @property
+    def embeddings_enabled(self) -> bool:
+        provider = (self.embedding_provider or "").strip().lower()
+        if provider == "none":
+            return False
+        if provider == "openai":
+            return bool(self.embedding_api_key.strip())
+        if provider == "hash":
+            return True
+        return False
+
+    @property
+    def vector_enabled(self) -> bool:
+        return self.embeddings_enabled and (self.vector_backend or "").lower() == "numpy"
 
 
 @lru_cache(maxsize=1)

@@ -15,6 +15,7 @@ venv/
 .env
 backend/rules.db
 backend/uploads/
+backend/.vector_index/
 
 # Node / frontend
 node_modules/

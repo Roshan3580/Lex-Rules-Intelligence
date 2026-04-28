@@ -21,6 +21,9 @@ def ask(payload: schemas.AskRequest, db: Session = Depends(get_db)):
         question=payload.question,
         state=payload.state,
         tax_category=payload.tax_category,
+        workflow_stage=payload.workflow_stage,
+        operating_scenario=payload.operating_scenario,
+        statuses=payload.statuses,
         top_k=payload.top_k,
     )
 
@@ -41,6 +44,9 @@ def query(payload: schemas.QueryRequest, db: Session = Depends(get_db)):
         question=payload.question,
         state=payload.state,
         tax_category=payload.tax_type,
+        workflow_stage=payload.workflow_stage,
+        operating_scenario=payload.operating_scenario,
+        statuses=payload.statuses,
         top_k=payload.top_k,
     )
 
@@ -71,6 +77,7 @@ def query(payload: schemas.QueryRequest, db: Session = Depends(get_db)):
         sources=sources,
         confidence=answer.confidence_score,
         method=answer.method,
+        retrieval_mode=answer.retrieval_mode,
         rules_used=answer.rules_used,
         question_id=answer.question_id,
         answered_at=answer.created_at,

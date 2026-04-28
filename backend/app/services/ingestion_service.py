@@ -36,6 +36,7 @@ from .. import models
 from ..config import settings
 from ..utils.chunking import chunk_text
 from . import extraction_service, versioning
+from .vector_store import vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -350,6 +351,10 @@ def ingest_text(
         versioning.capture_source_version(db, source, reason="initial")
         db.commit()
         db.refresh(source)
+        try:
+            vector_store.index_chunks(db, source)
+        except Exception as exc:
+            logger.warning("Vector indexing failed for %s: %s", source.id, exc)
         return source, chunks, rules, method
     except Exception as exc:
         _mark_failed(db, source, f"{type(exc).__name__}: {exc}")
@@ -407,6 +412,12 @@ def ingest_url(
                 existing.status = "processed"
                 db.commit()
                 db.refresh(existing)
+                try:
+                    vector_store.index_chunks(db, existing, replace=True)
+                except Exception as exc:
+                    logger.warning(
+                        "Vector reindex failed for %s: %s", existing.id, exc
+                    )
                 return existing, chunks, 0, "updated"
             except Exception as exc:
                 _mark_failed(db, existing, f"{type(exc).__name__}: {exc}")
@@ -433,6 +444,10 @@ def ingest_url(
         versioning.capture_source_version(db, source, reason="initial")
         db.commit()
         db.refresh(source)
+        try:
+            vector_store.index_chunks(db, source)
+        except Exception as exc:
+            logger.warning("Vector indexing failed for %s: %s", source.id, exc)
         return source, chunks, rules, method
     except Exception as exc:
         _mark_failed(db, source, f"{type(exc).__name__}: {exc}")
@@ -509,6 +524,10 @@ def ingest_upload(
         versioning.capture_source_version(db, source, reason="initial")
         db.commit()
         db.refresh(source)
+        try:
+            vector_store.index_chunks(db, source)
+        except Exception as exc:
+            logger.warning("Vector indexing failed for %s: %s", source.id, exc)
         return source, chunks, rules, method
     except Exception as exc:
         _mark_failed(db, source, f"{type(exc).__name__}: {exc}")

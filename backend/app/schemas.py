@@ -265,6 +265,9 @@ class AskRequest(BaseModel):
     question: str = Field(..., min_length=1)
     state: Optional[str] = None
     tax_category: Optional[str] = None
+    workflow_stage: Optional[str] = None
+    operating_scenario: Optional[str] = None
+    statuses: Optional[list[str]] = None
     top_k: int = 6
 
 
@@ -277,6 +280,7 @@ class AnswerOut(BaseModel):
     citations: list[Citation]
     rules_used: list[RuleOut]
     method: str
+    retrieval_mode: str = "lexical"
     state: Optional[str] = None
     tax_category: Optional[str] = None
     created_at: datetime
@@ -316,6 +320,11 @@ class HealthOut(BaseModel):
     llm_enabled: bool
     database: str
     demo_mode: bool = False
+    embedding_provider: str = "none"
+    embedding_enabled: bool = False
+    vector_backend: str = "none"
+    vector_enabled: bool = False
+    vector_index_size: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +338,9 @@ class QueryRequest(BaseModel):
     question: str = Field(..., min_length=1)
     state: Optional[str] = None
     tax_type: Optional[str] = None  # synonym of tax_category
+    workflow_stage: Optional[str] = None
+    operating_scenario: Optional[str] = None
+    statuses: Optional[list[str]] = None
     top_k: int = 6
 
 
@@ -352,6 +364,7 @@ class QueryResponse(BaseModel):
     sources: list[QuerySource]
     confidence: float
     method: str  # llm | fallback
+    retrieval_mode: str = "lexical"  # lexical | hybrid
     rules_used: list["RuleOut"]
     question_id: str
     answered_at: datetime

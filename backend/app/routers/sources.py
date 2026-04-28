@@ -15,6 +15,14 @@ from ..services import ingestion_service
 router = APIRouter(prefix="/api/sources", tags=["sources"])
 
 
+@router.post("/reindex")
+def reindex_vectors(db: Session = Depends(get_db)):
+    """Rebuild the vector index from scratch from all chunks in the DB."""
+    from ..services.vector_store import vector_store
+    count = vector_store.rebuild_from_db(db)
+    return {"reindexed_chunks": count, **vector_store.stats()}
+
+
 def _to_out(source: models.Source, db: Session) -> schemas.SourceOut:
     chunk_count = (
         db.query(models.SourceChunk)
@@ -244,4 +252,9 @@ def delete_source(source_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Source not found")
     db.delete(src)
     db.commit()
+    try:
+        from ..services.vector_store import vector_store
+        vector_store.remove_source(source_id)
+    except Exception:
+        pass
     return {"deleted": source_id}

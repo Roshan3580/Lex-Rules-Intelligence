@@ -79,6 +79,7 @@ export interface QueryResponse {
   sources: QuerySource[];
   confidence: number;
   method: "llm" | "fallback";
+  retrieval_mode?: "lexical" | "hybrid" | string;
   rules_used: Rule[];
   question_id: string;
   answered_at: string;
@@ -260,6 +261,11 @@ export interface Health {
   llm_enabled: boolean;
   database: string;
   demo_mode?: boolean;
+  embedding_provider?: string;
+  embedding_enabled?: boolean;
+  vector_backend?: string;
+  vector_enabled?: boolean;
+  vector_index_size?: number;
 }
 
 export class ApiError extends Error {
@@ -302,8 +308,17 @@ export const api = {
     question: string;
     state?: string;
     tax_type?: TaxType;
+    workflow_stage?: string;
+    operating_scenario?: string;
+    statuses?: string[];
     top_k?: number;
   }) => request<QueryResponse>("/api/query", { method: "POST", json: payload }),
+
+  reindexVectors: () =>
+    request<{ reindexed_chunks: number } & Record<string, unknown>>(
+      "/api/sources/reindex",
+      { method: "POST" },
+    ),
 
   // Rules
   rules: (params?: {

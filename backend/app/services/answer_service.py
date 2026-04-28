@@ -39,7 +39,10 @@ def answer_question(
     question: str,
     state: Optional[str] = None,
     tax_category: Optional[str] = None,
+    workflow_stage: Optional[str] = None,
+    operating_scenario: Optional[str] = None,
     top_k: int = 6,
+    statuses: Optional[list[str]] = None,
 ) -> schemas.AnswerOut:
     q_row = models.Question(
         text=question, state=state, tax_category=tax_category
@@ -48,11 +51,19 @@ def answer_question(
     db.flush()
 
     retrieved_rules = retrieval_service.retrieve_rules(
-        db, question, state=state, tax_category=tax_category, top_k=top_k
+        db,
+        question,
+        state=state,
+        tax_category=tax_category,
+        workflow_stage=workflow_stage,
+        operating_scenario=operating_scenario,
+        statuses=statuses,
+        top_k=top_k,
     )
     retrieved_chunks = retrieval_service.retrieve_chunks(
         db, question, state=state, tax_category=tax_category, top_k=top_k
     )
+    retrieval_mode = retrieval_service.last_mode()
 
     citations = _build_citations(retrieved_rules, retrieved_chunks)
 
@@ -101,6 +112,7 @@ def answer_question(
         citations=citations,
         rules_used=[schemas.RuleOut.model_validate(r) for r in rules_used],
         method=method,
+        retrieval_mode=retrieval_mode,
         state=state,
         tax_category=tax_category,
         created_at=answer_row.created_at,
