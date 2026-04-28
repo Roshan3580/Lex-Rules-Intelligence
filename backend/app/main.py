@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import SessionLocal, init_db
-from .routers import admin, ingest, meta, questions, review, rules, sources, workflows
+from .routers import admin, dashboard, ingest, meta, questions, review, rules, sources, workflows
 from .schemas import HealthOut
 from .seed import seed_if_empty
 
@@ -54,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(ingest.router)
     app.include_router(workflows.router)
     app.include_router(admin.router)
+    app.include_router(dashboard.router)
 
     @app.on_event("startup")
     def _startup() -> None:

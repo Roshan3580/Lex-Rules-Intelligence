@@ -64,6 +64,47 @@ export interface AdminSummary {
   vector_index_size: number;
 }
 
+export interface DashboardActivity {
+  id: string;
+  kind: string;
+  title: string;
+  detail: string;
+  context: string;
+  confidence_pct: number | null;
+  ref_type: string | null;
+  ref_id: string | null;
+  created_at: string;
+}
+
+export interface DashboardAlert {
+  id: string;
+  severity: string;
+  title: string;
+  body: string;
+  ref_type: string | null;
+  ref_id: string | null;
+}
+
+export interface DashboardKPIs {
+  total_sources: number;
+  total_rules: number;
+  published_rules: number;
+  rules_in_review: number;
+  avg_confidence: number;
+  failed_sources: number;
+  last_ingestion_run: AdminSummary["last_ingestion_run"];
+  llm_enabled: boolean;
+  retrieval_mode: string;
+  embedding_provider: string;
+  vector_index_size: number;
+}
+
+export interface DashboardResponse {
+  kpis: DashboardKPIs;
+  activities: DashboardActivity[];
+  alerts: DashboardAlert[];
+}
+
 export interface ReviewAuditEvent {
   id: string;
   rule_id: string;
@@ -384,6 +425,11 @@ export const api = {
   adminAudit: (limit?: number) =>
     request<ReviewAuditEvent[]>(
       `/api/admin/audit${limit != null ? `?limit=${limit}` : ""}`,
+    ),
+
+  dashboard: (activityLimit?: number) =>
+    request<DashboardResponse>(
+      `/api/dashboard${activityLimit != null ? `?activity_limit=${activityLimit}` : ""}`,
     ),
 
   states: () => request<StateOut[]>("/api/states"),

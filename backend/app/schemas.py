@@ -505,6 +505,52 @@ class ReviewAuditEventOut(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Dashboard (Phase 9)
+# ---------------------------------------------------------------------------
+
+
+class DashboardActivityOut(BaseModel):
+    id: str
+    kind: str
+    title: str
+    detail: str
+    context: str = ""
+    confidence_pct: Optional[int] = None
+    ref_type: Optional[str] = None
+    ref_id: Optional[str] = None
+    created_at: datetime
+
+
+class DashboardAlertOut(BaseModel):
+    id: str
+    severity: str
+    title: str
+    body: str
+    ref_type: Optional[str] = None
+    ref_id: Optional[str] = None
+
+
+class DashboardKPIsOut(BaseModel):
+    total_sources: int
+    total_rules: int
+    published_rules: int
+    rules_in_review: int
+    avg_confidence: float
+    failed_sources: int
+    last_ingestion_run: Optional[dict[str, Any]] = None
+    llm_enabled: bool
+    retrieval_mode: str = "lexical"
+    embedding_provider: str = "none"
+    vector_index_size: int = 0
+
+
+class DashboardOut(BaseModel):
+    kpis: DashboardKPIsOut
+    activities: list[DashboardActivityOut]
+    alerts: list[DashboardAlertOut]
+
+
+# ---------------------------------------------------------------------------
 # Workflow guidance (Phase 7)
 # ---------------------------------------------------------------------------
 
