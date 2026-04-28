@@ -201,6 +201,10 @@ class Answer(Base):
     confidence_score: Mapped[float] = mapped_column(Float, default=0.0)
     citations: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
     rules_used: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
+    chunks_used: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
+    source_versions_used: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
+    retrieval_mode: Mapped[str] = mapped_column(String(32), default="lexical")
+    safety_flags: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
     method: Mapped[str] = mapped_column(String(32), default="fallback")  # llm | fallback
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 

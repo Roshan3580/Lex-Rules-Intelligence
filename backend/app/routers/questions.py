@@ -79,6 +79,9 @@ def query(payload: schemas.QueryRequest, db: Session = Depends(get_db)):
         method=answer.method,
         retrieval_mode=answer.retrieval_mode,
         rules_used=answer.rules_used,
+        chunks_used=answer.chunks_used,
+        source_versions_used=answer.source_versions_used,
+        safety_flags=answer.safety_flags,
         question_id=answer.question_id,
         answered_at=answer.created_at,
     )

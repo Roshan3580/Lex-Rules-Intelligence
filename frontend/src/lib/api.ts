@@ -81,6 +81,9 @@ export interface QueryResponse {
   method: "llm" | "fallback";
   retrieval_mode?: "lexical" | "hybrid" | string;
   rules_used: Rule[];
+  chunks_used?: string[];
+  source_versions_used?: string[];
+  safety_flags?: string[];
   question_id: string;
   answered_at: string;
 }

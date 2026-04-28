@@ -279,6 +279,9 @@ class AnswerOut(BaseModel):
     confidence_score: float
     citations: list[Citation]
     rules_used: list[RuleOut]
+    chunks_used: list[str] = []
+    source_versions_used: list[str] = []
+    safety_flags: list[str] = []
     method: str
     retrieval_mode: str = "lexical"
     state: Optional[str] = None
@@ -366,6 +369,9 @@ class QueryResponse(BaseModel):
     method: str  # llm | fallback
     retrieval_mode: str = "lexical"  # lexical | hybrid
     rules_used: list["RuleOut"]
+    chunks_used: list[str] = []
+    source_versions_used: list[str] = []
+    safety_flags: list[str] = []
     question_id: str
     answered_at: datetime
 
