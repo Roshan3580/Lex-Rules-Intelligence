@@ -56,14 +56,28 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     def _startup() -> None:
         init_db()
-        with SessionLocal() as db:
-            inserted = seed_if_empty(db)
-            if inserted:
-                logger.info("Seeded %d demo rules across CA, TX, NY", inserted)
+        if settings.demo_mode:
+            with SessionLocal() as db:
+                inserted = seed_if_empty(db)
+                if inserted:
+                    logger.info(
+                        "DEMO_MODE: seeded %d illustrative rules across CA, TX, NY",
+                        inserted,
+                    )
+                else:
+                    logger.info(
+                        "DEMO_MODE: rules table already populated, skipping seed"
+                    )
+        else:
+            logger.info(
+                "DEMO_MODE off: skipping illustrative seed. "
+                "Use POST /api/ingest/run or upload sources to populate."
+            )
         logger.info(
-            "Backend ready (LLM enabled: %s, model: %s)",
+            "Backend ready (LLM enabled: %s, model: %s, demo_mode: %s)",
             settings.llm_enabled,
             settings.llm_model if settings.llm_enabled else "fallback",
+            settings.demo_mode,
         )
 
     @app.get("/api/health", response_model=HealthOut)
@@ -72,6 +86,7 @@ def create_app() -> FastAPI:
             status="ok",
             llm_enabled=settings.llm_enabled,
             database=settings.database_url.split("://", 1)[0],
+            demo_mode=settings.demo_mode,
         )
 
     return app

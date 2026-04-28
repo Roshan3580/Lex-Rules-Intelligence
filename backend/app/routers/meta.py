@@ -38,6 +38,7 @@ def health() -> schemas.HealthOut:
         status="ok",
         llm_enabled=settings.llm_enabled,
         database=settings.database_url.split("://", 1)[0],
+        demo_mode=settings.demo_mode,
     )
 
 

@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:5173"
     upload_dir: str = "./uploads"
 
+    # When DEMO_MODE=true the backend will insert the illustrative
+    # CA/TX/NY seed rules in app/seed.py so the app is demoable from
+    # an empty DB. Default is False — production starts empty.
+    demo_mode: bool = False
+
     @property
     def upload_path(self) -> Path:
         p = Path(self.upload_dir).resolve()

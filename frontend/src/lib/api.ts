@@ -128,6 +128,7 @@ export interface Health {
   status: string;
   llm_enabled: boolean;
   database: string;
+  demo_mode?: boolean;
 }
 
 export class ApiError extends Error {

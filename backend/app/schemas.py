@@ -216,6 +216,7 @@ class HealthOut(BaseModel):
     status: str
     llm_enabled: bool
     database: str
+    demo_mode: bool = False
 
 
 # ---------------------------------------------------------------------------

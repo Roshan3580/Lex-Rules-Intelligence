@@ -1,15 +1,16 @@
 # State Tax Rules Intelligence Platform
 
 A production-style prototype that turns fragmented state tax law sources
-(PDFs, government portals, bulletins, uploaded documents, pasted text)
-into structured, searchable, source-backed workflow intelligence.
+(state department websites, PDFs, bulletins, manuals, uploaded documents,
+pasted text) into structured, searchable, source-backed workflow
+intelligence — for all 50 U.S. states.
 
-It is **not** a chatbot wrapper — every answer is grounded in indexed
+It is **not** a chatbot wrapper. Every answer is grounded in indexed
 sources, returns citations and a confidence score, and routes
 low-confidence rules to a human review console. The data model and
 ingestion pipeline are inspired directly by the canonical rule schema in
-the engineering brief (Sections 4–9 of `Product Overview - Derrick Lewis -
-Stealth Startup - v2.pdf`).
+the engineering brief (`Product Overview - Derrick Lewis - Stealth Startup
+- v2.pdf`).
 
 > **Design principle:** "Turn fragmented state tax law sources into
 > structured, searchable, source-backed workflow intelligence."
@@ -27,102 +28,164 @@ Users can ask questions like:
 
 For each question the platform:
 
-1. Filters by state and tax category (if provided).
-2. Retrieves relevant rules and source chunks.
+1. Filters by **state** and **tax type** (if provided).
+2. Retrieves relevant **rules** and **source chunks**.
 3. Generates a grounded answer (LLM if configured, otherwise a
    deterministic fallback that summarizes the top-ranked rules).
-4. Returns **citations**, a **confidence score**, and the **rules
-   used** so the user can verify everything against the original source.
+4. Returns **citations**, a **confidence score**, the **rules used**,
+   and the **last_checked** timestamp for each source so the user can
+   verify everything against the original document or webpage.
 
-It also lets operators **upload PDFs, ingest URLs, or paste text**;
-auto-extracts candidate rules; and routes anything below a confidence
-threshold to an **admin review queue** for edit / approve / publish /
-reject actions, with a full audit trail.
+It also lets operators **upload PDFs, ingest URLs, paste text, or run a
+curated batch** (`app/data/sources.yaml`) and auto-extracts candidate
+rules. Anything below a confidence threshold is routed to an **admin
+review queue** for edit / approve / publish / reject actions, with a
+full audit trail.
 
-## How it maps to the PDF brief
+## Tech stack
 
-| Brief capability                                 | Implementation                                                             |
-| ------------------------------------------------ | -------------------------------------------------------------------------- |
-| 4.1 Rules Repository, canonical schema (§6)      | `Rule` ORM model + Pydantic schemas; review-status state machine           |
-| 4.2 Forms / submission intelligence              | `required_forms`, `required_actions`, `submission_method`-style metadata    |
-| 4.5 Continuous maintenance, ingestion            | `ingestion_service` (PDF/URL/text/upload), chunked storage, source lineage |
-| 4.7 Cross-cutting: source ingestion + extraction | `extraction_service` with hybrid LLM + deterministic heuristics            |
-| §7 Functional: full traceability, citations      | Every `Rule` retains `source_id`, `source_url`, `source_snippet`           |
-| §7 Optional human review console                 | `/api/review` endpoints + Admin Review page                                |
-| §8 Explainability                                | Answer payload always returns citations + confidence + method              |
-| §9.7 Modular monolith, AI/LLM abstraction        | Single FastAPI app with clean service boundaries; OpenAI-compatible client |
-| §9.5 Confidence thresholds, exception routing    | `confidence_score` + `review_status` ∈ {needs_review, auto_validated, ...} |
-| §9.5 Self-host fallback, no LLM dependency       | Deterministic answer + rule-extraction fallbacks if `LLM_API_KEY` is unset |
+- **Backend:** Python 3.11 · FastAPI · SQLAlchemy 2.x · Pydantic v2
+- **DB:** SQLite by default; PostgreSQL via `DATABASE_URL`
+  (compose has an optional `postgres` profile)
+- **Ingestion:** `requests` + `BeautifulSoup` for HTML; PyMuPDF →
+  pdfplumber fallback for PDFs
+- **LLM:** any OpenAI-compatible chat-completions endpoint (configurable
+  via `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`); deterministic
+  fallback when no key is set
+- **Frontend:** React 18 + TypeScript + Vite + Tailwind + shadcn/ui +
+  TanStack Query (Lovable-generated UI, wired to the backend)
 
 ## Architecture
 
-This is a **modular monolith** (per §9.7 of the brief — extract to
-services later, only when load or team boundaries justify it).
+This is a **modular monolith**. Single deployable, clear module
+boundaries:
 
 ```
-┌─────────────────────────────┐         ┌──────────────────────────────────────┐
-│   React + TS + Tailwind     │  /api   │  FastAPI                             │
-│   (Vite, shadcn/ui)         │ ──────▶ │  ┌─────────────────────────────────┐ │
-│   pages: Ask, Rules,        │         │  │ routers/ (sources, rules,       │ │
-│   Sources, Admin Review     │         │  │           questions, review)    │ │
-└─────────────────────────────┘         │  └────────────────┬────────────────┘ │
-                                        │                   │                  │
-                                        │  ┌────────────────▼────────────────┐ │
-                                        │  │ services/                       │ │
-                                        │  │  ingestion → extraction →       │ │
-                                        │  │  retrieval → answer → review    │ │
-                                        │  └────────────────┬────────────────┘ │
-                                        │                   │                  │
-                                        │  ┌────────────────▼────────────────┐ │
-                                        │  │ SQLAlchemy models               │ │
-                                        │  │ Source · SourceChunk · Rule     │ │
-                                        │  │ Question · Answer · ReviewEvent │ │
-                                        │  └────────────────┬────────────────┘ │
-                                        └────────────────────┼─────────────────┘
-                                                             │
-                                                  ┌──────────▼─────────┐
-                                                  │ SQLite (default)   │
-                                                  │ or PostgreSQL      │
-                                                  └────────────────────┘
+┌──────────────────────────────┐         ┌────────────────────────────────────────┐
+│  React + TS + Tailwind UI    │  /api   │  FastAPI                               │
+│  /app/search   (Rule Search) │ ──────▶ │  routers/ → services/ → models         │
+│  /app/sources  (Sources)     │         │                                        │
+│  /app/review   (Review)      │         │  meta · sources · rules · questions    │
+│  /app                        │         │  · review · ingest                     │
+└──────────────────────────────┘         │                                        │
+                                         │  ingestion → extraction →              │
+                                         │  retrieval → answer → review           │
+                                         │                                        │
+                                         │  Source · SourceChunk · Rule           │
+                                         │  Question · Answer · ReviewEvent       │
+                                         └─────────────────┬──────────────────────┘
+                                                           │
+                                                ┌──────────▼──────────┐
+                                                │ SQLite (default)    │
+                                                │ or PostgreSQL       │
+                                                └─────────────────────┘
 ```
 
 ```
 backend/
   app/
-    main.py                  # FastAPI app + startup (init DB, seed demo data)
-    config.py                # Settings (env-driven, OpenAI-compatible LLM)
-    database.py              # SQLAlchemy engine + session
-    models.py                # Sources, chunks, rules, Q&A, review events
-    schemas.py               # Pydantic DTOs
-    seed.py                  # CA / TX / NY demo data
+    main.py                       # FastAPI app + startup (init DB, seed demo)
+    config.py                     # Settings (env-driven, OpenAI-compat LLM)
+    database.py                   # SQLAlchemy engine + session
+    models.py                     # Source, SourceChunk, Rule, Question,
+                                  # Answer, ReviewEvent (+ checksum,
+                                  # last_checked, rule_category, page_number)
+    schemas.py                    # Pydantic DTOs (incl. /api/query shape)
+    seed.py                       # CA / TX / NY in-memory seed
+    data/sources.yaml             # Curated state tax URLs for /api/ingest/run
     routers/
-      sources.py             # Upload PDF, ingest URL, ingest text, list/delete
-      rules.py               # List / get / create rules
-      questions.py           # POST /api/ask
-      review.py              # Admin queue + edit/approve/reject/publish
+      meta.py                     # GET /health, GET /api/states
+      sources.py                  # /api/sources/upload, /url, /text
+      rules.py                    # GET /api/rules?state=&tax_type=
+      questions.py                # POST /api/ask + POST /api/query
+      review.py                   # /api/review/queue, edit, action, events
+      ingest.py                   # POST /api/ingest/source, /api/ingest/run
     services/
-      ingestion_service.py   # PDF + URL + text + uploads → chunks
-      extraction_service.py  # Hybrid LLM + heuristic rule extraction
-      retrieval_service.py   # Lexical retrieval over rules + chunks
-      answer_service.py      # RAG flow: retrieve → answer → cite
-      review_service.py      # Edit/approve/reject/publish + audit trail
+      ingestion_service.py        # PDF + URL + text + uploads → chunks
+                                  # checksum-based dedupe, last_checked
+      extraction_service.py       # Hybrid LLM + heuristic rule extraction
+      retrieval_service.py        # Lexical retrieval over rules + chunks
+      answer_service.py           # RAG flow: retrieve → answer → cite
+      review_service.py           # Edit / approve / reject / publish + audit
+      seed_runner.py              # Loads sources.yaml and ingests each entry
     utils/
-      chunking.py            # Sentence-aware text chunker
-      llm_client.py          # OpenAI-compatible HTTP client + JSON parser
+      chunking.py                 # Sentence-aware text chunker
+      llm_client.py               # OpenAI-compatible HTTP client + JSON parser
   requirements.txt
   .env.example
   Dockerfile
 
 frontend/
-  src/                       # Vite + React + TS + Tailwind + shadcn/ui
+  src/
+    lib/api.ts                    # Typed fetch client (states, query, ingest, …)
+    pages/app/
+      Dashboard.tsx               # Live KPIs from the backend
+      RuleSearch.tsx              # Connected to POST /api/query
+      Sources.tsx                 # Connected to /api/sources + /api/ingest
+      ReviewQueue.tsx             # Connected to /api/review/*
+      Workflows.tsx, Analytics.tsx, Admin.tsx   # cosmetic (unchanged)
+    components/                   # shadcn/ui + custom (Confidence, NavLink, …)
+  vite.config.ts                  # /api + /health proxy → http://localhost:8000
   package.json
-  vite.config.ts
-  Dockerfile
 
-docker-compose.yml           # backend + frontend (+ optional Postgres profile)
+docker-compose.yml                # backend + frontend (+ optional postgres)
 ```
 
-## Setup instructions
+## API surface
+
+| Method | Path                                    | Purpose                                           |
+| ------ | --------------------------------------- | ------------------------------------------------- |
+| GET    | `/health`                               | Backend status + LLM mode + DB type               |
+| GET    | `/api/states`                           | All 50 U.S. states (name + abbreviation)          |
+| GET    | `/api/rules?state=&tax_type=&review_status=` | Structured rules; `tax_type` and `tax_category` are synonyms |
+| POST   | `/api/query`                            | RAG Q&A · spec-shaped response with citations     |
+| POST   | `/api/ingest/source`                    | Add one source (URL or pasted text)               |
+| POST   | `/api/ingest/run`                       | Batch-run the curated `sources.yaml` list         |
+| GET    | `/api/sources`                          | List indexed sources                              |
+| POST   | `/api/sources/upload`                   | Multipart PDF/TXT/HTML upload                     |
+| DELETE | `/api/sources/{id}`                     | Remove a source                                   |
+| GET    | `/api/review/queue`                     | Rules needing human review                        |
+| POST   | `/api/review/rules/{id}/action`         | approve / reject / publish / needs_review         |
+| GET    | `/api/review/rules/{id}/events`         | Audit trail                                       |
+
+`POST /api/query` request:
+
+```json
+{
+  "question": "What are the sales tax filing rules in California?",
+  "state": "California",
+  "tax_type": "sales_tax"
+}
+```
+
+Response:
+
+```json
+{
+  "answer": "...detailed answer grounded in retrieved sources...",
+  "state": "California",
+  "tax_type": "sales_tax",
+  "confidence": 0.82,
+  "method": "fallback",
+  "sources": [
+    {
+      "title": "CDTFA — Sales and Use Tax in California",
+      "url": "https://www.cdtfa.ca.gov/...",
+      "snippet": "...",
+      "document_type": "webpage",
+      "last_checked": "2026-04-27T20:35:00Z",
+      "state": "California",
+      "tax_type": "sales_tax",
+      "relevance": 0.41
+    }
+  ],
+  "rules_used": [ /* full Rule objects */ ],
+  "question_id": "…",
+  "answered_at": "2026-04-27T20:35:00Z"
+}
+```
+
+## Setup
 
 ### Prerequisites
 
@@ -132,16 +195,16 @@ docker-compose.yml           # backend + frontend (+ optional Postgres profile)
 
 ### Environment variables
 
-`backend/.env.example` shows the full set. The most important ones:
+`backend/.env.example` shows the full set:
 
-| Var             | Default                              | Notes                                 |
-| --------------- | ------------------------------------ | ------------------------------------- |
-| `DATABASE_URL`  | `sqlite:///./rules.db`               | Set Postgres URL to switch DBs        |
-| `LLM_API_KEY`   | *(empty)*                            | If empty, uses deterministic fallback |
-| `LLM_BASE_URL`  | `https://api.openai.com/v1`          | Any OpenAI-compatible endpoint        |
-| `LLM_MODEL`     | `gpt-4o-mini`                        | Model name for extraction + answers   |
-| `FRONTEND_ORIGIN` | `http://localhost:5173`            | CORS allowlist for the dev server     |
-| `UPLOAD_DIR`    | `./uploads`                          | Where uploaded files are written      |
+| Var               | Default                      | Notes                                 |
+| ----------------- | ---------------------------- | ------------------------------------- |
+| `DATABASE_URL`    | `sqlite:///./rules.db`       | Set Postgres URL to switch DBs        |
+| `LLM_API_KEY`     | *(empty)*                    | If empty, deterministic fallback only |
+| `LLM_BASE_URL`    | `https://api.openai.com/v1`  | Any OpenAI-compatible endpoint        |
+| `LLM_MODEL`       | `gpt-4o-mini`                | Model name for extraction + answers   |
+| `FRONTEND_ORIGIN` | `http://localhost:8080`      | CORS allowlist                        |
+| `UPLOAD_DIR`      | `./uploads`                  | Where uploaded files are written      |
 
 Copy and edit:
 
@@ -158,9 +221,14 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-On first start the app creates SQLite tables and seeds demo rules for
-California, Texas, and New York. The OpenAPI docs are at
-<http://localhost:8000/docs>.
+On first start the app:
+
+1. Creates SQLite tables.
+2. Seeds in-memory demo rules for **California, Texas, and New York**
+   (so `/api/query` returns grounded answers immediately, even without
+   running any external ingestion).
+
+OpenAPI docs: <http://localhost:8000/docs>
 
 ### Run the frontend
 
@@ -170,8 +238,9 @@ npm install
 npm run dev
 ```
 
-The dev server runs on <http://localhost:5173> and proxies `/api/*` to
-`http://localhost:8000` via `vite.config.ts`.
+The dev server runs on **<http://localhost:8080>** and proxies `/api/*`
+and `/health` to `http://localhost:8000` via `vite.config.ts`. Open
+`/app/search` to ask a question, or use the sidebar to navigate.
 
 ### Run via Docker
 
@@ -179,83 +248,109 @@ The dev server runs on <http://localhost:5173> and proxies `/api/*` to
 docker compose up --build
 ```
 
-Add `--profile postgres` and set `DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/rules`
+Add `--profile postgres` and set
+`DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/rules`
 to use Postgres instead of SQLite.
 
 ## How to use it
 
-### Ask a state tax question
+### 1. Ask a state tax question
 
-1. Open the **Ask** page.
-2. (Optional) Pick a state and tax category.
-3. Type a question or click one of the example chips.
-4. Inspect the answer panel, the **Source citations** sidebar, the
-   **Rules used** list, and the confidence badge.
+1. Open <http://localhost:8080/app/search>.
+2. Pick a **State** and **Tax type** in the filter row (or leave them
+   on `Any`).
+3. Type a question (or click one of the example chips), hit
+   **Search**.
+4. Inspect the **Grounded answer** card, the rules-used list, and the
+   **Why this answer?** sidebar with literal source snippets and links
+   to the original documents/webpages.
 
-### Upload a PDF
+### 2. Upload a PDF
 
-1. Open the **Sources** page.
-2. Use the **Upload a document** card. Choose a state and tax category
-   so retrieval can filter intelligently.
+1. Open <http://localhost:8080/app/sources>.
+2. Drop a PDF in the **Drop PDFs to ingest** card (optionally tag it
+   with state + tax type).
 3. The backend extracts text (PyMuPDF → pdfplumber fallback), chunks
-   it, and runs rule extraction (LLM if configured; heuristic
-   otherwise). Auto-extracted rules show up in the Rules and Admin
-   Review pages.
+   it, and runs rule extraction. Auto-extracted rules show up in the
+   review queue and on the search page.
 
-### Ingest a URL
+### 3. Add a state tax website (URL)
 
-1. Open the **Sources** page → **Ingest a URL**.
-2. Paste a state-government URL (e.g. a CDTFA bulletin page). The
-   crawler fetches, strips nav/footer/script, chunks, and extracts.
+1. Same page, **Add a state tax website** card.
+2. Paste a URL (e.g. `https://www.cdtfa.ca.gov/taxes-and-fees/sutprograms.htm`).
+3. Tag with state + tax type so retrieval can filter intelligently.
 
-### Admin review of low-confidence rules
+### 4. Run the curated source batch
 
-1. Open the **Admin Review** page.
-2. Pick a rule from the queue. Edit any field; one-click **Approve**,
-   **Publish**, **Reject**, or send back to **Needs review**.
-3. Every change writes a `ReviewEvent` for full audit trail.
+The file `backend/app/data/sources.yaml` contains official state tax
+sources for California, New York, and Texas. To ingest them all:
 
-## API surface (high-level)
+- **From the UI:** Sources page → **Run ingestion** button.
+- **From the API:** `curl -XPOST http://localhost:8000/api/ingest/run`.
 
-| Method | Path                                | Purpose                              |
-| ------ | ----------------------------------- | ------------------------------------ |
-| GET    | `/api/health`                       | Status + LLM mode + DB type          |
-| POST   | `/api/sources/upload`               | Multipart upload (PDF/TXT/HTML)      |
-| POST   | `/api/sources/url`                  | Ingest a URL                         |
-| POST   | `/api/sources/text`                 | Ingest pasted text                   |
-| GET    | `/api/sources`                      | List sources                         |
-| DELETE | `/api/sources/{id}`                 | Delete a source                      |
-| GET    | `/api/rules`                        | List rules (filter by state/cat/status) |
-| POST   | `/api/rules`                        | Create a rule manually               |
-| POST   | `/api/ask`                          | RAG Q&A with citations               |
-| GET    | `/api/review/queue`                 | Rules needing human review           |
-| PATCH  | `/api/review/rules/{id}`            | Edit a rule                         |
-| POST   | `/api/review/rules/{id}/action`     | approve / reject / publish / needs_review |
-| GET    | `/api/review/rules/{id}/events`     | Audit trail                          |
+You'll get a per-source breakdown (`ingested` / `duplicate` / `error`).
+Already-ingested sources are skipped via SHA-256 checksum on the
+extracted text — re-runs only pick up changes.
+
+To add more states, append entries to `sources.yaml` and re-run.
+
+### 5. Admin review of low-confidence rules
+
+1. Open <http://localhost:8080/app/review>.
+2. Pick a rule from the queue. Inspect the original source snippet
+   side-by-side with the extracted fields.
+3. Use **Approve / Publish / Reject / Needs review**. Every action
+   writes a `ReviewEvent` for full audit trail.
+
+## How it maps to the PDF brief
+
+| Brief capability                               | Implementation                                                              |
+| ---------------------------------------------- | --------------------------------------------------------------------------- |
+| 4.1 Rules Repository, canonical schema (§6)    | `Rule` ORM model + Pydantic schemas; review-status state machine            |
+| 4.2 Forms / submission intelligence            | `required_forms`, `required_actions`, deadlines structured per rule         |
+| 4.5 Continuous maintenance, ingestion          | `ingestion_service` (PDF/URL/text/upload) + `seed_runner` (sources.yaml)    |
+| 4.7 Cross-cutting: source ingestion + extraction | Hybrid LLM + deterministic heuristics; checksum-based dedupe              |
+| §7 Functional: full traceability, citations    | Every Rule retains `source_id`, `source_url`, `source_snippet`              |
+| §7 Optional human review console               | `/api/review/*` + Review Queue page                                         |
+| §8 Explainability                              | `/api/query` always returns sources + confidence + method                   |
+| §9.7 Modular monolith, AI/LLM abstraction      | One FastAPI app; OpenAI-compatible client; swappable provider               |
+| §9.5 Confidence thresholds, exception routing  | `confidence_score` + `review_status ∈ {needs_review, auto_validated, …}`    |
+| §9.5 Self-host fallback, no LLM dependency     | Deterministic answer + rule-extraction fallbacks if `LLM_API_KEY` is unset  |
 
 ## Design notes
 
-- **Why a modular monolith?** The brief's §9.7 explicitly recommends
-  this for v1. Ingestion + extraction would be the most likely first
-  service-extraction; the code is laid out so that pulling them out
-  later is mechanical.
+- **Why a modular monolith?** §9.7 of the brief recommends this for v1.
+  Ingestion + extraction would be the most likely first
+  service-extraction; the code is laid out so pulling them out later is
+  mechanical.
 - **Why no vector store yet?** Rule corpora at v1 are small; a careful
   lexical scorer with state/category prefilters returns sub-100ms top-k
-  with zero infrastructure. The `retrieval_service` interface is
-  intentionally narrow so a `pgvector`/Qdrant backend drops in cleanly.
+  with zero infrastructure. The retrieval interface is intentionally
+  narrow so a `pgvector` / Qdrant backend drops in cleanly.
 - **Why a deterministic fallback?** Every demoable AI feature must
   degrade gracefully. With no `LLM_API_KEY`, ingestion still chunks +
   heuristically extracts rules, and Q&A still returns a structured
-  answer assembled from retrieved rules with citations.
+  answer assembled from retrieved rules with citations. The system
+  never invents a tax rule.
 - **Source traceability is non-negotiable.** Every extracted rule
   carries `source_id`, `source_document_name`, `source_url`, and a
-  literal `source_snippet`. The Q&A response carries citations that
-  point back into the same rows.
+  literal `source_snippet`. The `/api/query` response carries citations
+  that point back into the same rows.
+
+## Current limitations
+
+- The retriever is lexical (BM25-ish + filters), not vector-based. Good
+  for the v1 corpus size; would want pgvector at scale.
+- Some state portals require JS / login walls — those would need
+  Playwright (the brief mentions this as a v1.5 capability).
+- The seed `sources.yaml` covers CA, NY, TX. Add more entries for full
+  50-state coverage.
+- No multi-tenant RBAC yet (the Admin page is cosmetic).
 
 ## Future roadmap
 
 - pgvector embeddings + hybrid retrieval (BM25 + vector)
-- Headless-browser ingestion (Playwright) for portals with JS / login walls
+- Playwright-based ingestion for portals with JS / login walls
 - Change detection: page-level hashing + embedding distance, with
   impact analysis on rules referencing changed passages
 - Multi-tenant row-level security and SSO (OIDC/SAML)
@@ -268,6 +363,6 @@ to use Postgres instead of SQLite.
 
 ---
 
-The seeded demo rules are clearly marked as illustrative. For
-production, replace the seed sources with real authoritative URLs and
-PDFs ingested via the Sources page.
+Seeded demo rules are clearly marked as illustrative. For production,
+replace the seed sources with real authoritative URLs and PDFs ingested
+via the Sources page or `/api/ingest/run`.
