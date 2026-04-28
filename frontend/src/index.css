@@ -1,0 +1,138 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Dark-first premium SaaS palette */
+    --background: 224 24% 5%;
+    --foreground: 210 20% 96%;
+
+    --card: 225 22% 7%;
+    --card-foreground: 210 20% 96%;
+
+    --popover: 225 24% 8%;
+    --popover-foreground: 210 20% 96%;
+
+    --primary: 230 85% 62%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 250 90% 70%;
+
+    --secondary: 225 18% 12%;
+    --secondary-foreground: 210 20% 96%;
+
+    --muted: 225 16% 11%;
+    --muted-foreground: 220 10% 60%;
+
+    --accent: 265 70% 65%;
+    --accent-foreground: 0 0% 100%;
+
+    --teal: 175 70% 55%;
+    --success: 150 60% 50%;
+    --warning: 38 92% 60%;
+    --destructive: 0 70% 58%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 225 18% 14%;
+    --input: 225 18% 12%;
+    --ring: 230 85% 62%;
+
+    --radius: 1rem;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(230 85% 62%) 0%, hsl(265 80% 65%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(230 85% 62%) 0%, hsl(175 70% 55%) 100%);
+    --gradient-glow: radial-gradient(ellipse at top, hsl(230 85% 62% / 0.25), transparent 60%);
+    --gradient-mesh: radial-gradient(at 20% 0%, hsl(230 85% 62% / 0.18) 0px, transparent 50%),
+                     radial-gradient(at 80% 0%, hsl(265 70% 65% / 0.15) 0px, transparent 50%),
+                     radial-gradient(at 50% 100%, hsl(175 70% 55% / 0.10) 0px, transparent 50%);
+    --gradient-card: linear-gradient(180deg, hsl(225 22% 8% / 0.8), hsl(225 22% 6% / 0.6));
+
+    /* Shadows */
+    --shadow-glow: 0 0 40px hsl(230 85% 62% / 0.35);
+    --shadow-card: 0 1px 0 hsl(0 0% 100% / 0.04) inset, 0 8px 24px -8px hsl(0 0% 0% / 0.5);
+    --shadow-elegant: 0 20px 60px -20px hsl(230 85% 62% / 0.4);
+
+    /* Sidebar */
+    --sidebar-background: 225 24% 6%;
+    --sidebar-foreground: 220 12% 70%;
+    --sidebar-primary: 230 85% 62%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 225 20% 11%;
+    --sidebar-accent-foreground: 210 20% 96%;
+    --sidebar-border: 225 18% 12%;
+    --sidebar-ring: 230 85% 62%;
+
+    --transition-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .light {
+    --background: 0 0% 100%;
+    --foreground: 224 24% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 24% 8%;
+    --border: 220 14% 92%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01", "ss03";
+    background-image: var(--gradient-mesh);
+    background-attachment: fixed;
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.3);
+  }
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.4); }
+}
+
+@layer components {
+  .glass {
+    @apply bg-card/60 backdrop-blur-xl border border-border/60;
+  }
+  .glass-strong {
+    background: var(--gradient-card);
+    @apply backdrop-blur-2xl border border-border/80;
+  }
+  .gradient-text {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .gradient-border {
+    position: relative;
+    background: hsl(var(--card));
+  }
+  .gradient-border::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: var(--gradient-primary);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+  .grid-bg {
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.5) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.5) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 80%);
+  }
+  .glow {
+    box-shadow: var(--shadow-glow);
+  }
+}

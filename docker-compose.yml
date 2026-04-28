@@ -1,0 +1,42 @@
+services:
+  backend:
+    build: ./backend
+    container_name: rules-backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///./rules.db}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      FRONTEND_ORIGIN: http://localhost:5173
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - backend-data:/data
+
+  frontend:
+    build: ./frontend
+    container_name: rules-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+  # Optional Postgres. To use it, set DATABASE_URL accordingly and `docker
+  # compose up postgres backend frontend`.
+  postgres:
+    image: postgres:16-alpine
+    container_name: rules-postgres
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: rules
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  backend-data:
+  pgdata:

@@ -1,0 +1,25 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+backend/rules.db
+backend/uploads/
+
+# Node / frontend
+node_modules/
+dist/
+frontend/.env
+frontend/.env.local
+frontend/dist/
+*.log
