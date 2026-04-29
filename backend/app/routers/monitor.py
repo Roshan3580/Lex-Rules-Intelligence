@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
+from ..middleware.rbac import require_role
 from ..services import impact_service, monitor_service
+from ..services.cache_service import invalidate_enforcement_caches
 from .ingest import _item_from_db
 
 router = APIRouter(prefix="/api/monitor", tags=["monitor"])
@@ -15,8 +17,10 @@ router = APIRouter(prefix="/api/monitor", tags=["monitor"])
 
 @router.post("/run", response_model=schemas.IngestRunResult)
 def monitor_run(
+    request: Request,
     payload: schemas.MonitorRunRequest | None = None,
     db: Session = Depends(get_db),
+    _role: str = Depends(require_role("reviewer")),
 ):
     """Walk monitored sources (all, or ``source_ids``), re-fetch URLs, compare
     checksums, and re-chunk + re-extract when content changes. Sources without a
@@ -36,6 +40,22 @@ def monitor_run(
         .order_by(models.IngestionRunItem.created_at.asc())
         .all()
     )
+    from ..services import audit_service
+
+    audit_service.log(
+        db,
+        action="monitor_run",
+        resource_type="monitor_run",
+        resource_id=run.id,
+        actor=getattr(request.state, "user_id", None),
+        detail={
+            "ingestion_run_kind": run.kind,
+            "total": run.total,
+            "ingested": run.ingested,
+            "errors": run.errors,
+        },
+    )
+    invalidate_enforcement_caches()
     return schemas.IngestRunResult(
         total=run.total,
         ingested=run.ingested,
@@ -47,5 +67,9 @@ def monitor_run(
 
 
 @router.post("/impact")
-def monitor_impact(source_id: str = Query(...), db: Session = Depends(get_db)):
+def monitor_impact(
+    source_id: str = Query(...),
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_role("reviewer")),
+):
     return impact_service.analyze_source_impact(db, source_id=source_id)

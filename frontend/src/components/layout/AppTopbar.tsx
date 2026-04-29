@@ -1,5 +1,6 @@
 import { Bell, Search, Command } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { RbacRoleSwitcher } from "@/components/RbacRoleSwitcher";
 
 export function AppTopbar() {
   return (
@@ -17,6 +18,7 @@ export function AppTopbar() {
         </div>
 
         <div className="flex items-center gap-2 ml-auto">
+          <RbacRoleSwitcher />
           <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-success/10 border border-success/20">
             <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
             <span className="text-[11px] font-medium text-success">All systems operational</span>

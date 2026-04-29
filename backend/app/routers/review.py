@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
+from ..middleware.rbac import require_role
 from ..services import review_service, validation
+from ..services.cache_service import invalidate_enforcement_caches
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -23,11 +25,13 @@ def edit_rule(
     rule_id: str,
     payload: schemas.RuleUpdate,
     db: Session = Depends(get_db),
+    _role: str = Depends(require_role("reviewer")),
 ):
     try:
         rule = review_service.update_rule(db, rule_id, payload)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    invalidate_enforcement_caches()
     return schemas.RuleOut.model_validate(rule)
 
 
@@ -36,7 +40,9 @@ def rule_action(
     rule_id: str,
     payload: schemas.ReviewActionRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
+    _role: str = Depends(require_role("reviewer")),
 ):
     # Publish gate: validation + confidence + human approve (brief §8).
     if payload.action == "publish":
@@ -74,7 +80,7 @@ def rule_action(
             action=payload.action,
             resource_type="rule",
             resource_id=rule_id,
-            actor=payload.actor,
+            actor=payload.actor or getattr(request.state, "user_id", None),
             detail={"notes": payload.notes},
         )
 
@@ -93,6 +99,7 @@ def rule_action(
             },
         )
 
+    invalidate_enforcement_caches()
     return schemas.RuleOut.model_validate(rule)
 
 

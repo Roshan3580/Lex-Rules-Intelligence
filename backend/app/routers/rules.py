@@ -9,7 +9,10 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
+from ..middleware.rbac import require_role
 from ..services import review_service, validation, versioning
+from ..services.backfill_service import sync_canonical_fields_for_new_rule
+from ..services.cache_service import invalidate_enforcement_caches
 
 router = APIRouter(prefix="/api/rules", tags=["rules"])
 
@@ -44,7 +47,11 @@ def get_rule(rule_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=schemas.RuleOut, status_code=201)
-def create_rule(payload: schemas.RuleCreate, db: Session = Depends(get_db)):
+def create_rule(
+    payload: schemas.RuleCreate,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_role("admin")),
+):
     rule = models.Rule(
         state=payload.state,
         tax_category=payload.tax_category,
@@ -75,6 +82,7 @@ def create_rule(payload: schemas.RuleCreate, db: Session = Depends(get_db)):
     )
     db.add(rule)
     db.flush()
+    sync_canonical_fields_for_new_rule(db, rule)
     versioning.capture_rule_version(
         db,
         rule,
@@ -85,6 +93,7 @@ def create_rule(payload: schemas.RuleCreate, db: Session = Depends(get_db)):
     )
     db.commit()
     db.refresh(rule)
+    invalidate_enforcement_caches()
     return schemas.RuleOut.model_validate(rule)
 
 
@@ -103,7 +112,11 @@ def list_rule_versions(rule_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{rule_id}/validate", response_model=schemas.RuleAssessmentOut)
-def validate_rule(rule_id: str, db: Session = Depends(get_db)):
+def validate_rule(
+    rule_id: str,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_role("reviewer")),
+):
     """Re-run validation + dedup/conflict detection on an existing rule.
 
     Returns the assessment without mutating the rule. Use this from the

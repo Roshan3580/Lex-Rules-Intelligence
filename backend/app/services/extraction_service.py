@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..utils.llm_client import llm_client
 from . import validation, versioning
+from .backfill_service import sync_canonical_fields_for_new_rule
 
 PROMPT_VERSION = "v2-phase4"
 
@@ -375,6 +376,8 @@ def _persist_llm_rule(
         },
     )
     db.add(rule)
+    db.flush()
+    sync_canonical_fields_for_new_rule(db, rule)
     return rule
 
 
@@ -510,6 +513,8 @@ def _extract_with_heuristics(
             },
         )
         db.add(rule)
+        db.flush()
+        sync_canonical_fields_for_new_rule(db, rule)
         created += 1
 
     db.flush()

@@ -74,6 +74,7 @@ def advance(
     stage = case.current_stage or "intake"
     val = rule_engine.validate_submission(
         db,
+        tenant_id="default",
         state=st,
         tax_category=case.tax_category or "general_tax",
         workflow_stage=stage,

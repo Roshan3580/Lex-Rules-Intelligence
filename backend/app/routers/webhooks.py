@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import secrets
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
+from ..middleware.rbac import require_role
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
@@ -16,7 +17,9 @@ router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 @router.post("/register", response_model=schemas.WebhookRegisterResponse)
 def register_webhook(
     body: schemas.WebhookRegisterBody,
+    request: Request,
     db: Session = Depends(get_db),
+    _role: str = Depends(require_role("admin")),
 ):
     signing_secret = secrets.token_hex(32)
     wh = models.WebhookSubscription(
@@ -30,6 +33,20 @@ def register_webhook(
     db.add(wh)
     db.commit()
     db.refresh(wh)
+    from ..services import audit_service
+
+    audit_service.log(
+        db,
+        action="webhook_registered",
+        resource_type="webhook_subscription",
+        resource_id=wh.id,
+        actor=getattr(request.state, "user_id", None),
+        detail={
+            "url": wh.url,
+            "events": list(wh.events or []),
+            "tenant_id": body.tenant_id,
+        },
+    )
     return schemas.WebhookRegisterResponse(
         id=wh.id,
         url=wh.url,

@@ -14,12 +14,14 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..services import ingestion_runs, ingestion_service, seed_runner
+from ..middleware.rbac import require_role
+from ..services import audit_service, ingestion_runs, ingestion_service, seed_runner
+from ..services.cache_service import invalidate_enforcement_caches
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 
@@ -137,7 +139,9 @@ def _ingest_one_url(
 @router.post("/source", response_model=schemas.IngestRunResult)
 def ingest_source(
     payload: schemas.IngestSourceRequest,
+    request: Request,
     db: Session = Depends(get_db),
+    _role: str = Depends(require_role("admin")),
 ):
     """Add a single source (URL, manual text, or PDF URL) to the index.
 
@@ -168,6 +172,14 @@ def ingest_source(
         kind=kind,
         triggered_by="api:/api/ingest/source",
         notes=f"source_type={payload.source_type}",
+    )
+    audit_service.log(
+        db,
+        action="ingestion_run_started",
+        resource_type="ingestion_run",
+        resource_id=run.id,
+        actor=getattr(request.state, "user_id", None),
+        detail={"trigger_api": "/api/ingest/source", "run_kind": kind},
     )
 
     try:
@@ -239,6 +251,8 @@ def ingest_source(
     finally:
         ingestion_runs.finish_run(db, run)
 
+    invalidate_enforcement_caches()
+
     items_db = (
         db.query(models.IngestionRunItem)
         .filter(models.IngestionRunItem.run_id == run.id)
@@ -257,8 +271,10 @@ def ingest_source(
 
 @router.post("/run", response_model=schemas.IngestRunResult)
 def ingest_run(
+    request: Request,
     payload: schemas.IngestRunRequest | None = None,
     db: Session = Depends(get_db),
+    _role: str = Depends(require_role("admin")),
 ):
     """Run ingestion for the curated source list in app/data/sources.yaml."""
     payload = payload or schemas.IngestRunRequest()
@@ -267,6 +283,14 @@ def ingest_run(
         only_state=payload.only_state,
         only_tax_type=payload.only_tax_type,
         auto_extract=payload.auto_extract,
+    )
+    audit_service.log(
+        db,
+        action="ingestion_run_started",
+        resource_type="ingestion_run",
+        resource_id=run.id,
+        actor=getattr(request.state, "user_id", None),
+        detail={"trigger_api": "/api/ingest/run", "run_kind": run.kind},
     )
 
     items = [
@@ -289,6 +313,7 @@ def ingest_run(
         )
         for r in results
     ]
+    invalidate_enforcement_caches()
     return schemas.IngestRunResult(
         total=run.total,
         ingested=run.ingested,

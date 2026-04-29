@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
+from ..middleware.rbac import require_role
 from ..services import outcomes_service, rule_engine
 from ..services.webhook_delivery_service import schedule_send_event
 
@@ -91,16 +92,36 @@ def _outcome_to_schema(ev) -> schemas.OutcomeEventOut:
 def validate_submission_endpoint(
     body: schemas.ValidateSubmissionRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     raw = rule_engine.validate_submission(
         db,
+        tenant_id="default",
         state=body.state,
         tax_category=body.tax_category,
         workflow_stage=body.workflow_stage,
         effective_date=body.effective_date,
         program_variant=body.program_variant,
         payload=body.payload,
+        debug=bool(body.debug),
+    )
+    from ..services import audit_service
+
+    audit_service.log(
+        db,
+        action="validate_submission",
+        resource_type="submission",
+        resource_id=None,
+        actor=getattr(request.state, "user_id", None),
+        detail={
+            "valid": raw["valid"],
+            "risk_level": raw["risk_level"],
+            "violation_count": len(raw.get("violations") or []),
+            "state": body.state,
+            "tax_category": body.tax_category,
+            "workflow_stage": body.workflow_stage,
+        },
     )
     schedule_send_event(
         background_tasks,
@@ -114,7 +135,9 @@ def validate_submission_endpoint(
 def create_outcome_endpoint(
     body: schemas.OutcomeCreateRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
+    _role: str = Depends(require_role("reviewer")),
 ):
     ev, meta = outcomes_service.create_outcome(
         db,
@@ -128,6 +151,23 @@ def create_outcome_endpoint(
         payload=body.payload,
     )
     snap = meta["validation_at_outcome"]
+    from ..services import audit_service
+
+    audit_service.log(
+        db,
+        action="outcome_created",
+        resource_type="outcome",
+        resource_id=ev.id,
+        actor=getattr(request.state, "user_id", None),
+        detail={
+            "state": ev.state,
+            "tax_category": ev.tax_category,
+            "coverage_status": ev.coverage_status,
+            "submission_id": ev.submission_id,
+            "rejection_code": body.rejection_code,
+            "matched_rule_count": len(ev.matched_rule_ids or []),
+        },
+    )
     schedule_send_event(
         background_tasks,
         "outcome.created",

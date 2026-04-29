@@ -21,6 +21,7 @@ import Rejections from "./pages/app/Rejections";
 import Onboarding from "./pages/app/Onboarding";
 import DemoGuide from "./pages/app/DemoGuide";
 import WebhooksPage from "./pages/app/Webhooks";
+import AuditTrail from "./pages/app/AuditTrail";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="onboarding" element={<Onboarding />} />
             <Route path="demo" element={<DemoGuide />} />
             <Route path="webhooks" element={<WebhooksPage />} />
+            <Route path="audit" element={<AuditTrail />} />
             <Route path="admin" element={<Admin />} />
           </Route>
           <Route path="*" element={<NotFound />} />

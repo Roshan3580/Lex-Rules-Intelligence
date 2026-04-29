@@ -31,9 +31,9 @@ def list_roles():
             description="Ingest sources and move rules through review.",
         ),
         schemas.AdminRoleOut(
-            id="readonly",
-            label="Read-only",
-            description="View audit and stats only; no mutations.",
+            id="viewer",
+            label="Viewer",
+            description="View audit and stats; read-only against mutations.",
         ),
     ]
 

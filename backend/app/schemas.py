@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -517,6 +517,24 @@ class ReviewAuditEventOut(BaseModel):
         from_attributes = True
 
 
+class AuditLogPublic(BaseModel):
+    """Governed audit row (maps DB ``AuditLogEntry``; ``entity_*`` mirrors ``resource_*`` columns)."""
+
+    id: str
+    created_at: datetime
+    actor: Optional[str] = None
+    user_role: Optional[str] = None
+    action: str
+    entity_type: str
+    entity_id: Optional[str] = None
+    detail: Optional[dict[str, Any]] = None
+
+
+class AuditLogsResponse(BaseModel):
+    logs: list[AuditLogPublic]
+    total: int
+
+
 # ---------------------------------------------------------------------------
 # Dashboard (Phase 9)
 # ---------------------------------------------------------------------------
@@ -745,6 +763,10 @@ class ValidateSubmissionRequest(BaseModel):
     )
     program_variant: Optional[dict[str, Any]] = None
     payload: dict[str, Any] = Field(default_factory=dict)
+    debug: bool = Field(
+        False,
+        description="When true, skip validation result caching.",
+    )
 
 
 class ViolationSourceOut(BaseModel):
@@ -945,10 +967,48 @@ class DemoResetOut(BaseModel):
     status: str
 
 
+class CacheNamespaceStatsOut(BaseModel):
+    hits: int
+    misses: int
+    sets: int
+    invalidations: int
+    current_size: int
+
+
+class CacheMetricsOut(BaseModel):
+    namespaces: dict[str, CacheNamespaceStatsOut]
+
+
+class CacheClearRequest(BaseModel):
+    namespace: Optional[str] = None
+
+
 class KpiSummaryOut(BaseModel):
     rules_published: int
     outcome_events: int
     active_sources: int
+
+
+class CanonicalConsistencyReportOut(BaseModel):
+    total_rules: int
+    rules_missing_jurisdiction_id: int
+    rules_missing_program_variant_ref_id: int
+    rules_with_legacy_program_variant_but_no_fk: int
+    rules_with_rejection_map_but_no_links: int
+    rules_by_review_status: dict[str, int]
+    rules_by_tenant_id: dict[str, int]
+
+
+class CanonicalBackfillRequest(BaseModel):
+    target: Literal["all", "jurisdictions", "program_variants", "rejection_links"] = "all"
+    dry_run: bool = True
+
+
+class CanonicalBackfillResponse(BaseModel):
+    dry_run: bool
+    target: str
+    changes: list[dict[str, Any]]
+    summary: dict[str, int]
 
 
 SourceDetail.model_rebuild()

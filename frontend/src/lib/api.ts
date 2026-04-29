@@ -2,6 +2,9 @@
 // Vite proxies /api/* to http://localhost:8000 by default (see vite.config.ts).
 // In production, set VITE_API_BASE to the absolute backend URL.
 
+
+import { toast } from "sonner";
+
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") ?? "";
 
 export type TaxType =
@@ -203,26 +206,77 @@ export interface ReviewAuditEvent {
   created_at: string;
 }
 
-export type AppRoleId = "admin" | "reviewer" | "readonly";
+/** Governed audit row (GET /api/audit). */
+export interface AuditLogPublic {
+  id: string;
+  created_at: string;
+  actor: string | null;
+  user_role: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  detail: Record<string, unknown> | null;
+}
+
+export interface AuditLogsResponse {
+  logs: AuditLogPublic[];
+  total: number;
+}
+
+export type AppRoleId = "admin" | "reviewer" | "viewer";
 
 const ROLE_STORAGE_KEY = "rules_intel_app_role";
+export const DEMO_USER_ID = "demo-user";
+
+function normalizeLegacyStoredRole(raw: string | null): AppRoleId | null {
+  if (raw === "readonly") return "viewer";
+  if (raw === "admin" || raw === "reviewer" || raw === "viewer") return raw;
+  return null;
+}
+
+/** Role string sent as `X-User-Role` (`readonly` maps to viewer). */
+export function getApiRoleHeader(): AppRoleId {
+  return (
+    normalizeLegacyStoredRole(
+      typeof localStorage !== "undefined"
+        ? localStorage.getItem(ROLE_STORAGE_KEY)
+        : null,
+    ) ?? (import.meta.env.DEV ? "admin" : "viewer")
+  );
+}
 
 export function getAppRole(): AppRoleId {
   try {
     const v = localStorage.getItem(ROLE_STORAGE_KEY);
-    if (v === "admin" || v === "reviewer" || v === "readonly") return v;
+    if (v === "readonly") {
+      localStorage.setItem(ROLE_STORAGE_KEY, "viewer");
+      return "viewer";
+    }
+    const n = normalizeLegacyStoredRole(v);
+    if (n) return n;
   } catch {
     /* ignore */
   }
-  return "admin";
+  return import.meta.env.DEV ? "admin" : "viewer";
 }
 
 export function setAppRole(role: AppRoleId): void {
   try {
     localStorage.setItem(ROLE_STORAGE_KEY, role);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("rules_intel_app_role"));
+    }
   } catch {
     /* ignore */
   }
+}
+
+export function rbacHeaders(existing?: HeadersInit): HeadersInit {
+  const h =
+    existing instanceof Headers ? existing : new Headers(existing ?? undefined);
+  h.set("X-User-Role", getApiRoleHeader());
+  h.set("X-User-Id", DEMO_USER_ID);
+  return h;
 }
 
 export interface Rule {
@@ -484,7 +538,9 @@ async function request<T>(
   path: string,
   init?: RequestInit & { json?: unknown }
 ): Promise<T> {
-  const headers = new Headers(init?.headers);
+  const merged = rbacHeaders(init?.headers as HeadersInit | undefined);
+  const headers =
+    merged instanceof Headers ? merged : new Headers(merged);
   let body: BodyInit | undefined = init?.body as BodyInit | undefined;
   if (init?.json !== undefined) {
     headers.set("Content-Type", "application/json");
@@ -492,10 +548,15 @@ async function request<T>(
   }
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers, body });
   if (!res.ok) {
+    if (res.status === 403) {
+      toast.error(
+        "You need reviewer or admin access for this action.",
+      );
+    }
     let detail = res.statusText;
     try {
       const data = await res.json();
-      detail = data.detail || JSON.stringify(data);
+      detail = data.detail ?? JSON.stringify(data);
     } catch {
       // ignore
     }
@@ -503,6 +564,26 @@ async function request<T>(
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+/** GET `/api/audit` (reviewer or admin RBAC headers). */
+export function getAuditLogs(params?: {
+  entity_type?: string;
+  entity_id?: string;
+  action?: string;
+  actor?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<AuditLogsResponse> {
+  const q = new URLSearchParams();
+  if (params?.entity_type) q.set("entity_type", params.entity_type);
+  if (params?.entity_id) q.set("entity_id", params.entity_id);
+  if (params?.action) q.set("action", params.action);
+  if (params?.actor) q.set("actor", params.actor);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const qs = q.toString();
+  return request<AuditLogsResponse>(`/api/audit${qs ? `?${qs}` : ""}`);
 }
 
 export const api = {
@@ -515,6 +596,8 @@ export const api = {
     request<ReviewAuditEvent[]>(
       `/api/admin/audit${limit != null ? `?limit=${limit}` : ""}`,
     ),
+
+  getAuditLogs,
 
   dashboard: (activityLimit?: number) =>
     request<DashboardResponse>(
@@ -567,6 +650,22 @@ export const api = {
     ),
 
   platformKpis: () => request<KpiSummary>("/api/platform/kpis"),
+  platformCache: () => request<CacheMetricsOut>("/api/platform/cache"),
+  platformCacheClear: (body?: { namespace?: string }) =>
+    request<{ status: string }>("/api/platform/cache/clear", {
+      method: "POST",
+      json: body ?? {},
+    }),
+
+  canonicalReport: () => request<CanonicalConsistencyReportOut>("/api/platform/canonical-report"),
+  canonicalBackfill: (payload: {
+    target: "all" | "jurisdictions" | "program_variants" | "rejection_links";
+    dry_run: boolean;
+  }) =>
+    request<CanonicalBackfillResponseOut>("/api/platform/backfill", {
+      method: "POST",
+      json: payload,
+    }),
 
   webhookSubscriptions: (activeOnly = false) =>
     request<WebhookSubscriptionRow[]>(
@@ -944,6 +1043,35 @@ export interface KpiSummary {
   rules_published: number;
   outcome_events: number;
   active_sources: number;
+}
+
+export interface CacheNamespaceStats {
+  hits: number;
+  misses: number;
+  sets: number;
+  invalidations: number;
+  current_size: number;
+}
+
+export interface CacheMetricsOut {
+  namespaces: Record<string, CacheNamespaceStats>;
+}
+
+export interface CanonicalConsistencyReportOut {
+  total_rules: number;
+  rules_missing_jurisdiction_id: number;
+  rules_missing_program_variant_ref_id: number;
+  rules_with_legacy_program_variant_but_no_fk: number;
+  rules_with_rejection_map_but_no_links: number;
+  rules_by_review_status: Record<string, number>;
+  rules_by_tenant_id: Record<string, number>;
+}
+
+export interface CanonicalBackfillResponseOut {
+  dry_run: boolean;
+  target: string;
+  changes: Record<string, unknown>[];
+  summary: Record<string, number>;
 }
 
 export interface WebhookSubscriptionRow {

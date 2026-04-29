@@ -16,6 +16,7 @@ import {
   TriangleAlert,
   ClipboardList,
   PartyPopper,
+  ScrollText,
   Webhook,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ const items = [
   { title: "Onboarding", url: "/app/onboarding", icon: ClipboardList },
   { title: "Guided demo", url: "/app/demo", icon: PartyPopper },
   { title: "Webhooks", url: "/app/webhooks", icon: Webhook },
+  { title: "Audit Trail", url: "/app/audit", icon: ScrollText },
   { title: "Analytics", url: "/app/analytics", icon: BarChart3 },
   { title: "Admin", url: "/app/admin", icon: Shield },
 ];

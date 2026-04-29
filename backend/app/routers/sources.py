@@ -10,13 +10,18 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
+from ..middleware.rbac import require_role
 from ..services import ingestion_service
+from ..services.cache_service import invalidate_enforcement_caches
 
 router = APIRouter(prefix="/api/sources", tags=["sources"])
 
 
 @router.post("/reindex")
-def reindex_vectors(db: Session = Depends(get_db)):
+def reindex_vectors(
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_role("admin")),
+):
     """Rebuild the vector index from scratch from all chunks in the DB."""
     from ..services.vector_store import vector_store
     count = vector_store.rebuild_from_db(db)
@@ -148,7 +153,11 @@ def list_source_versions(source_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{source_id}/check", response_model=schemas.LinkHealthOut)
-def check_source(source_id: str, db: Session = Depends(get_db)):
+def check_source(
+    source_id: str,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_role("admin")),
+):
     """Health-check the URL of a source (HEAD/GET) and update last_checked."""
     src = db.query(models.Source).filter(models.Source.id == source_id).first()
     if src is None:
@@ -173,6 +182,7 @@ async def upload_source(
     tax_category: Optional[str] = Form(default=None),
     auto_extract: bool = Form(default=True),
     db: Session = Depends(get_db),
+    _role: str = Depends(require_role("admin")),
 ):
     try:
         data = await file.read()
@@ -190,6 +200,7 @@ async def upload_source(
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {exc}")
+    invalidate_enforcement_caches()
     return schemas.IngestResult(
         source=_to_out(source, db),
         chunks_created=chunks,
@@ -202,6 +213,7 @@ async def upload_source(
 def ingest_url_endpoint(
     payload: schemas.IngestUrlRequest,
     db: Session = Depends(get_db),
+    _role: str = Depends(require_role("admin")),
 ):
     try:
         source, chunks, rules, method = ingestion_service.ingest_url(
@@ -214,6 +226,7 @@ def ingest_url_endpoint(
         )
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"URL ingestion failed: {exc}")
+    invalidate_enforcement_caches()
     return schemas.IngestResult(
         source=_to_out(source, db),
         chunks_created=chunks,
@@ -226,6 +239,7 @@ def ingest_url_endpoint(
 def ingest_text_endpoint(
     payload: schemas.IngestTextRequest,
     db: Session = Depends(get_db),
+    _role: str = Depends(require_role("admin")),
 ):
     if not payload.text.strip():
         raise HTTPException(status_code=400, detail="Empty text")
@@ -237,6 +251,7 @@ def ingest_text_endpoint(
         tax_category=payload.tax_category,
         auto_extract=payload.auto_extract,
     )
+    invalidate_enforcement_caches()
     return schemas.IngestResult(
         source=_to_out(source, db),
         chunks_created=chunks,
@@ -246,7 +261,11 @@ def ingest_text_endpoint(
 
 
 @router.delete("/{source_id}")
-def delete_source(source_id: str, db: Session = Depends(get_db)):
+def delete_source(
+    source_id: str,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_role("admin")),
+):
     src = db.query(models.Source).filter(models.Source.id == source_id).first()
     if src is None:
         raise HTTPException(status_code=404, detail="Source not found")
@@ -257,4 +276,5 @@ def delete_source(source_id: str, db: Session = Depends(get_db)):
         vector_store.remove_source(source_id)
     except Exception:
         pass
+    invalidate_enforcement_caches()
     return {"deleted": source_id}

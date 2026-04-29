@@ -15,6 +15,16 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from .. import models
+from .cache_service import (
+    DEFAULT_TTL_RULE_LOOKUP,
+    DEFAULT_TTL_VALIDATION,
+    NAMESPACE_RULE_LOOKUP,
+    NAMESPACE_VALIDATION,
+    default_cache,
+    make_key,
+    sha256_hex,
+    stable_canonical_json,
+)
 from .validation import MIN_PUBLISH_CONFIDENCE
 
 ENFORCEMENT_STATUSES = frozenset({"published", "approved"})
@@ -309,9 +319,77 @@ def _program_variant_matches(
     return True
 
 
+def _rules_ordered_by_ids(
+    db: Session,
+    tenant_id: str,
+    ids: list[str],
+) -> list[models.Rule]:
+    if not ids:
+        return []
+    rows = (
+        db.query(models.Rule)
+        .filter(models.Rule.id.in_(ids))
+        .filter(models.Rule.tenant_id == tenant_id)
+        .all()
+    )
+    by_id = {r.id: r for r in rows}
+    return [by_id[i] for i in ids if i in by_id]
+
+
+def _rule_lookup_cache_key(
+    *,
+    tenant_id: str,
+    state: str,
+    tax_category: str,
+    workflow_stage: Optional[str],
+    effective_date: Optional[str],
+    program_variant: Optional[dict[str, Any]],
+) -> str:
+    pv_digest = sha256_hex(
+        stable_canonical_json(
+            program_variant if program_variant is not None else None
+        )
+    )
+    blob = stable_canonical_json(
+        {
+            "tenant_id": tenant_id,
+            "state": normalize_state(state),
+            "tax_category": tax_category,
+            "workflow_stage": workflow_stage or "",
+            "effective_date": effective_date or "",
+            "program_variant_digest": pv_digest,
+        }
+    )
+    return make_key(NAMESPACE_RULE_LOOKUP, sha256_hex(blob))
+
+
+def _validation_cache_key(
+    tenant_id: str,
+    state: str,
+    tax_category: str,
+    workflow_stage: Optional[str],
+    effective_date: Optional[str],
+    program_variant: Optional[dict[str, Any]],
+    payload: dict[str, Any],
+) -> str:
+    blob = stable_canonical_json(
+        {
+            "tenant_id": tenant_id,
+            "state": normalize_state(state),
+            "tax_category": tax_category,
+            "workflow_stage": workflow_stage or "",
+            "effective_date": effective_date or "",
+            "program_variant": program_variant if program_variant is not None else None,
+            "payload_digest": sha256_hex(stable_canonical_json(payload)),
+        }
+    )
+    return make_key(NAMESPACE_VALIDATION, sha256_hex(blob))
+
+
 def get_applicable_rules(
     db: Session,
     *,
+    tenant_id: str = "default",
     state: str,
     tax_category: str,
     workflow_stage: Optional[str] = None,
@@ -319,10 +397,28 @@ def get_applicable_rules(
     program_variant: Optional[dict[str, Any]] = None,
 ) -> tuple[list[models.Rule], list[str]]:
     """Return enforcement-eligible rules matching filters + effective dates."""
+    cache = default_cache()
+    ck = _rule_lookup_cache_key(
+        tenant_id=tenant_id,
+        state=state,
+        tax_category=tax_category,
+        workflow_stage=workflow_stage,
+        effective_date=effective_date,
+        program_variant=program_variant,
+    )
+    cached_pair = cache.get(ck)
+    if cached_pair is not None:
+        ids, cached_warnings = cached_pair
+        hydrated = _rules_ordered_by_ids(db, tenant_id, ids)
+        if len(hydrated) == len(ids):
+            return hydrated, cached_warnings
+        cache.delete(ck)
+
     warnings: list[str] = []
     st = normalize_state(state)
     q = (
         db.query(models.Rule)
+        .filter(models.Rule.tenant_id == tenant_id)
         .filter(models.Rule.state == st)
         .filter(models.Rule.tax_category == tax_category)
         .filter(models.Rule.review_status.in_(ENFORCEMENT_STATUSES))
@@ -350,6 +446,8 @@ def get_applicable_rules(
             )
             continue
         out.append(r)
+    ids_snapshot = [r.id for r in out]
+    cache.set(ck, (ids_snapshot, warnings), DEFAULT_TTL_RULE_LOOKUP)
     return out, warnings
 
 
@@ -448,14 +546,32 @@ def _collect_violations_for_applied_rule(
 def validate_submission(
     db: Session,
     *,
+    tenant_id: str = "default",
     state: str,
     tax_category: str,
     workflow_stage: Optional[str] = None,
     effective_date: Optional[str] = None,
     program_variant: Optional[dict[str, Any]] = None,
     payload: dict[str, Any],
+    debug: bool = False,
 ) -> dict[str, Any]:
     """Full submission validation — deterministic, explainable."""
+    cache = default_cache()
+    vk: Optional[str] = None
+    if not debug:
+        vk = _validation_cache_key(
+            tenant_id,
+            state,
+            tax_category,
+            workflow_stage,
+            effective_date,
+            program_variant,
+            payload,
+        )
+        hit = cache.get(vk)
+        if hit is not None:
+            return hit
+
     warnings: list[str] = []
     violations: list[dict[str, Any]] = []
     passed_rules: list[dict[str, str]] = []
@@ -463,6 +579,7 @@ def validate_submission(
 
     rules, w0 = get_applicable_rules(
         db,
+        tenant_id=tenant_id,
         state=state,
         tax_category=tax_category,
         workflow_stage=workflow_stage,
@@ -535,7 +652,7 @@ def validate_submission(
         )
     )
 
-    return {
+    result = {
         "valid": valid,
         "risk_level": risk,
         "violations": violations,
@@ -543,3 +660,12 @@ def validate_submission(
         "passed_rules": passed_rules,
         "explanation": expl,
     }
+
+    if (
+        not debug
+        and vk is not None
+        and not any("malformed condition_logic" in w for w in w0)
+    ):
+        cache.set(vk, result, DEFAULT_TTL_VALIDATION)
+
+    return result

@@ -76,6 +76,7 @@ def match_rules_for_outcome(
     """Return heuristic ``matched_rule_ids`` ordered by score and a confidence 0–1."""
     rules, _warn = rule_engine.get_applicable_rules(
         db,
+        tenant_id="default",
         state=state,
         tax_category=tax_category,
         workflow_stage=workflow_stage,
@@ -154,6 +155,7 @@ def create_outcome(
 
     val = rule_engine.validate_submission(
         db,
+        tenant_id="default",
         state=st,
         tax_category=tax_category,
         workflow_stage=workflow_stage,

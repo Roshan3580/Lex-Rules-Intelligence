@@ -14,10 +14,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
+from .middleware.rbac import RBACMiddleware
 from .database import SessionLocal, init_db
 from .routers import (
     admin,
     analytics,
+    audit,
     dashboard,
     demo,
     ingest,
@@ -62,12 +64,14 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RBACMiddleware)
 
     app.include_router(meta.router)
     app.include_router(sources.router)
     app.include_router(rules.router)
     app.include_router(questions.router)
     app.include_router(review.router)
+    app.include_router(audit.router)
     app.include_router(validation.router)
     app.include_router(ingest.router)
     app.include_router(workflows.router)
@@ -107,6 +111,10 @@ def create_app() -> FastAPI:
                         "DEMO_MODE: ensured %d Submission Validator enforcement demo rule(s)",
                         ensured,
                     )
+                if inserted or ensured:
+                    from .services.cache_service import invalidate_enforcement_caches
+
+                    invalidate_enforcement_caches()
         else:
             logger.info(
                 "DEMO_MODE off: skipping illustrative seed. "

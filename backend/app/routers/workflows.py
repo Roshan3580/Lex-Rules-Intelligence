@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
+from ..middleware.rbac import require_role
 from ..services import workflow_engine, workflows_service
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
@@ -56,6 +57,7 @@ def get_template(
 def create_case(
     payload: schemas.CreateCaseRequest,
     db: Session = Depends(get_db),
+    _role: str = Depends(require_role("reviewer")),
 ):
     try:
         return workflows_service.create_case(
@@ -97,6 +99,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
 def workflow_start(
     payload: schemas.WorkflowStartBody,
     db: Session = Depends(get_db),
+    _role: str = Depends(require_role("reviewer")),
 ):
     try:
         return workflow_engine.run_start(
@@ -119,6 +122,7 @@ def workflow_advance(
     case_identifier: str,
     payload: schemas.WorkflowAdvanceBody,
     db: Session = Depends(get_db),
+    _role: str = Depends(require_role("reviewer")),
 ):
     try:
         return workflow_engine.advance(
@@ -139,6 +143,7 @@ def update_step(
     case_id: str,
     payload: schemas.UpdateStepRequest,
     db: Session = Depends(get_db),
+    _role: str = Depends(require_role("reviewer")),
 ):
     try:
         case = workflows_service.update_step(
