@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Confidence } from "@/components/Confidence";
-import { api, confidenceToPct, Rule, taxTypeLabel } from "@/lib/api";
+import { api, confidenceToPct, Rule, RuleVersion, taxTypeLabel } from "@/lib/api";
 
 const ReviewQueue = () => {
   const [queue, setQueue] = useState<Rule[]>([]);
@@ -20,6 +20,7 @@ const ReviewQueue = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [versions, setVersions] = useState<RuleVersion[]>([]);
 
   async function load() {
     setLoading(true);
@@ -44,6 +45,25 @@ const ReviewQueue = () => {
   }, []);
 
   const item = queue.find((r) => r.id === selectedId) || queue[0];
+
+  useEffect(() => {
+    if (!item) {
+      setVersions([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .ruleVersions(item.id)
+      .then((v) => {
+        if (!cancelled) setVersions(v.slice(0, 12));
+      })
+      .catch(() => {
+        if (!cancelled) setVersions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [item?.id]);
 
   async function act(action: "approve" | "reject" | "publish" | "needs_review") {
     if (!item) return;
@@ -219,6 +239,11 @@ const ReviewQueue = () => {
                 {actionMessage && (
                   <span className="text-xs text-success ml-2">{actionMessage}</span>
                 )}
+                <p className="text-[10px] text-muted-foreground w-full mt-2 leading-relaxed">
+                  <strong className="text-foreground/80">Governance:</strong> Approve
+                  first, then Publish. Publishing requires passing validation,
+                  confidence ≥ 70%, and an explicit approval (engineer brief §8).
+                </p>
               </div>
             </div>
 
@@ -292,6 +317,75 @@ const ReviewQueue = () => {
                     items={item.exceptions}
                     dotClass="bg-warning"
                   />
+
+                  {(item.workflow_stage ||
+                    item.program_variant ||
+                    item.effective_date ||
+                    item.effective_date_end ||
+                    item.submission_method) && (
+                    <div className="rounded-xl border border-border/60 bg-card/40 p-4 space-y-2">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                        Program &amp; lifecycle (brief §6)
+                      </p>
+                      {item.workflow_stage && (
+                        <p className="text-xs">
+                          <span className="text-muted-foreground">Workflow stage:</span>{" "}
+                          {item.workflow_stage}
+                        </p>
+                      )}
+                      {item.submission_method && (
+                        <p className="text-xs">
+                          <span className="text-muted-foreground">Submission method:</span>{" "}
+                          {item.submission_method.replace(/_/g, " ")}
+                        </p>
+                      )}
+                      {(item.effective_date || item.effective_date_end) && (
+                        <p className="text-xs">
+                          <span className="text-muted-foreground">Effective:</span>{" "}
+                          {item.effective_date ?? "—"}
+                          {" → "}
+                          {item.effective_date_end ?? "—"}
+                        </p>
+                      )}
+                      {item.program_variant &&
+                        Object.keys(item.program_variant).length > 0 && (
+                          <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-secondary/40 rounded-lg p-2 max-h-28 overflow-y-auto">
+                            {JSON.stringify(item.program_variant, null, 2)}
+                          </pre>
+                        )}
+                    </div>
+                  )}
+
+                  {versions.length > 0 && (
+                    <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+                        Version history ({versions.length})
+                      </p>
+                      <ul className="space-y-2 max-h-36 overflow-y-auto">
+                        {versions.map((v) => (
+                          <li key={v.id} className="text-[11px] leading-snug">
+                            <span className="font-mono text-primary">v{v.version}</span>
+                            {v.captured_reason && (
+                              <span className="text-muted-foreground">
+                                {" "}
+                                · {v.captured_reason}
+                              </span>
+                            )}
+                            <span className="text-muted-foreground block text-[10px]">
+                              {new Date(v.created_at).toLocaleString()}
+                              {v.actor ? ` · ${v.actor}` : ""}
+                            </span>
+                            {v.changed_fields && v.changed_fields.length > 0 && (
+                              <span className="text-[10px] text-muted-foreground">
+                                Δ {v.changed_fields.slice(0, 6).join(", ")}
+                                {v.changed_fields.length > 6 ? "…" : ""}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
                   {item.confidence_score < 0.65 && (
                     <div className="rounded-xl border border-warning/30 bg-warning/5 p-4">

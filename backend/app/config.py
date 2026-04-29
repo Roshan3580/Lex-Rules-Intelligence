@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # an empty DB. Default is False — production starts empty.
     demo_mode: bool = False
 
+    # Governance: enforce extra publish fields (effective_date, etc.).
+    strict_publish_checks: bool = False
+
     # ------------------------------------------------------------------
     # Embeddings / hybrid retrieval (Phase 5)
     # ------------------------------------------------------------------

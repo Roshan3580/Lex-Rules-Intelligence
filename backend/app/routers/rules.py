@@ -20,6 +20,7 @@ def list_rules(
     tax_category: Optional[str] = None,
     tax_type: Optional[str] = None,
     review_status: Optional[str] = None,
+    workflow_stage: Optional[str] = None,
     limit: int = 200,
     db: Session = Depends(get_db),
 ):
@@ -28,6 +29,7 @@ def list_rules(
         state=state,
         tax_category=tax_category or tax_type,
         review_status=review_status,
+        workflow_stage=workflow_stage,
         limit=limit,
     )
     return [schemas.RuleOut.model_validate(r) for r in rules]
@@ -46,12 +48,19 @@ def create_rule(payload: schemas.RuleCreate, db: Session = Depends(get_db)):
     rule = models.Rule(
         state=payload.state,
         tax_category=payload.tax_category,
+        rule_category=payload.rule_category,
+        workflow_stage=payload.workflow_stage,
+        operating_scenario=payload.operating_scenario,
+        condition_logic=payload.condition_logic,
+        submission_method=payload.submission_method,
+        program_variant=payload.program_variant,
         rule_title=payload.rule_title,
         rule_summary=payload.rule_summary,
         detailed_rule=payload.detailed_rule,
         conditions=payload.conditions,
         required_actions=payload.required_actions,
         required_forms=payload.required_forms,
+        required_documentation=payload.required_documentation,
         deadlines=payload.deadlines,
         exceptions=payload.exceptions,
         source_id=payload.source_id,
@@ -59,6 +68,7 @@ def create_rule(payload: schemas.RuleCreate, db: Session = Depends(get_db)):
         source_document_name=payload.source_document_name,
         source_snippet=payload.source_snippet,
         effective_date=payload.effective_date,
+        effective_date_end=payload.effective_date_end,
         confidence_score=payload.confidence_score,
         review_status=payload.review_status,
         extraction_method=payload.extraction_method or "manual",

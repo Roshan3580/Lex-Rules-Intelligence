@@ -9,6 +9,14 @@ import {
   Shield,
   Sparkles,
   Settings,
+  ClipboardCheck,
+  Inbox,
+  Route,
+  GitBranch,
+  TriangleAlert,
+  ClipboardList,
+  PartyPopper,
+  Webhook,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +26,14 @@ const items = [
   { title: "Sources", url: "/app/sources", icon: Database },
   { title: "Workflows", url: "/app/workflows", icon: Workflow },
   { title: "Review Queue", url: "/app/review", icon: CheckSquare, count: 12 },
+  { title: "Submission Validator", url: "/app/validate", icon: ClipboardCheck },
+  { title: "Outcomes", url: "/app/outcomes", icon: Inbox },
+  { title: "Submission path", url: "/app/submission", icon: Route },
+  { title: "Workflow runner", url: "/app/workflow-runner", icon: GitBranch },
+  { title: "Rejections", url: "/app/rejections", icon: TriangleAlert },
+  { title: "Onboarding", url: "/app/onboarding", icon: ClipboardList },
+  { title: "Guided demo", url: "/app/demo", icon: PartyPopper },
+  { title: "Webhooks", url: "/app/webhooks", icon: Webhook },
   { title: "Analytics", url: "/app/analytics", icon: BarChart3 },
   { title: "Admin", url: "/app/admin", icon: Shield },
 ];

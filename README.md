@@ -99,6 +99,7 @@ backend/
       rules.py                    # GET /api/rules?state=&tax_type=
       questions.py                # POST /api/ask + POST /api/query
       review.py                   # /api/review/queue, edit, action, events
+      validation.py               # /api/validate-submission, /api/outcomes
       ingest.py                   # POST /api/ingest/source, /api/ingest/run
       monitor.py                  # POST /api/monitor/run (checksum / refresh)
     services/
@@ -108,6 +109,8 @@ backend/
       retrieval_service.py        # Lexical retrieval over rules + chunks
       answer_service.py           # RAG flow: retrieve → answer → cite
       review_service.py           # Edit / approve / reject / publish + audit
+      rule_engine.py              # Deterministic validate_submission (no LLM)
+      outcomes_service.py         # Outcome events + rejection coverage
       seed_runner.py              # Loads sources.yaml and ingests each entry
       monitor_service.py          # Batch refresh + IngestionRun(kind=monitor)
     utils/
@@ -125,7 +128,9 @@ frontend/
       RuleSearch.tsx              # Connected to POST /api/query
       Sources.tsx                 # Connected to /api/sources + /api/ingest
       ReviewQueue.tsx             # Connected to /api/review/*
-      Workflows.tsx, Analytics.tsx, Admin.tsx   # cosmetic (unchanged)
+      SubmissionValidator.tsx     # /app/validate — enforcement demo
+      Outcomes.tsx                # /app/outcomes — feedback loop + coverage
+      Workflows.tsx, Analytics.tsx, Admin.tsx
     components/                   # shadcn/ui + custom (Confidence, NavLink, …)
   vite.config.ts                  # /api + /health proxy → http://localhost:8000
   package.json
@@ -139,7 +144,7 @@ docker-compose.yml                # backend + frontend (+ optional postgres)
 | ------ | --------------------------------------- | ------------------------------------------------- |
 | GET    | `/health`                               | Backend status + LLM mode + DB type               |
 | GET    | `/api/states`                           | All 50 U.S. states (name + abbreviation)          |
-| GET    | `/api/rules?state=&tax_type=&review_status=` | Structured rules; `tax_type` and `tax_category` are synonyms |
+| GET    | `/api/rules`                            | Structured rules; `tax_type` synonym of `tax_category`; optional `workflow_stage` |
 | POST   | `/api/query`                            | RAG Q&A · spec-shaped response with citations     |
 | POST   | `/api/ingest/source`                    | Add one source (URL or pasted text)               |
 | POST   | `/api/ingest/run`                       | Batch-run the curated `sources.yaml` list         |
@@ -150,6 +155,10 @@ docker-compose.yml                # backend + frontend (+ optional postgres)
 | GET    | `/api/review/queue`                     | Rules needing human review                        |
 | POST   | `/api/review/rules/{id}/action`         | approve / reject / publish / needs_review         |
 | GET    | `/api/review/rules/{id}/events`         | Audit trail                                       |
+| POST   | `/api/validate-submission`              | Deterministic enforcement: published/approved rules only; no LLM |
+| POST   | `/api/outcomes`                          | Store rejection/outcome + coverage classification |
+| GET    | `/api/outcomes`                          | List outcomes (`state`, `tax_category`, `coverage_status`) |
+| GET    | `/api/analytics/rejection-coverage`     | Aggregate coverage %, buckets, top reasons      |
 
 `POST /api/query` request:
 
@@ -233,6 +242,33 @@ On first start the app:
 
 OpenAPI docs: <http://localhost:8000/docs>
 
+### Submission validation & outcomes
+
+Deterministic **`POST /api/validate-submission`** evaluates **published** and **approved** rules only (no LLM). The UI lives at **`/app/validate`**; rejection analytics and **`POST /api/outcomes`** are at **`/app/outcomes`**.
+
+**Demo data:** With an **empty** `rules` table and **`DEMO_MODE=true`** in `backend/.env`, startup seeds CA / TX / NY rules plus two **California `sales_tax` / `submission`** enforcement examples (`CDTFA-401-A` documentation gate and an **LLC + amount &gt; 10,000** `Schedule R (demo)` rule with JSON `condition_logic`). If you already have a database from an older build, delete `backend/rules.db` (or point `DATABASE_URL` at a fresh file) and restart to load them.
+
+Example request:
+
+```bash
+curl -s -X POST http://localhost:8000/api/validate-submission \
+  -H "Content-Type: application/json" \
+  -d '{
+    "state": "CA",
+    "tax_category": "sales_tax",
+    "workflow_stage": "submission",
+    "effective_date": "2026-04-28",
+    "payload": {
+      "documents": ["Form A"],
+      "amount": 50000,
+      "entity_type": "LLC",
+      "submission_method": "portal"
+    }
+  }' | jq .
+```
+
+**Tests:** `cd backend && pytest`
+
 ### Run the frontend
 
 ```bash
@@ -285,8 +321,11 @@ to use Postgres instead of SQLite.
 
 ### 4. Run the curated source batch
 
-The file `backend/app/data/sources.yaml` contains official state tax
-sources for California, New York, and Texas. To ingest them all:
+The file `backend/app/data/sources.yaml` lists one **general_tax** portal
+row per state (jurisdiction index) plus **pilot program** URLs for **CA /
+NY / TX** (sales, payroll, withholding, franchise — see file header).
+Run batch ingest to load what you need; full **50-state × portal** ingests
+are long-running and may hit rate limits or HTTP errors on some sites.
 
 - **From the UI:** Sources page → **Run ingestion** button.
 - **From the API:** `curl -XPOST http://localhost:8000/api/ingest/run`.
@@ -330,6 +369,11 @@ URL are **skipped** for fetch (status `skipped`) but still get
 `kind: monitor` for analytics and the UI activity feed.
 
 ### 6. Admin review of low-confidence rules
+
+Publishing is **governed** (engineer brief §8): a rule must be **Approved** before
+**Publish**; publish also requires passing validation and **confidence ≥ 0.70**.
+Program metadata (`program_variant`, effective date range, workflow stage)
+is shown in the Review Queue and stored on each rule (brief §6).
 
 1. Open <http://localhost:8080/app/review>.
 2. Pick a rule from the queue. Inspect the original source snippet
@@ -397,8 +441,9 @@ Frontend typecheck: `cd frontend && npx tsc --noEmit`
   for the v1 corpus size; would want pgvector at scale.
 - Some state portals require JS / login walls — those would need
   Playwright (the brief mentions this as a v1.5 capability).
-- The seed `sources.yaml` covers CA, NY, TX. Add more entries for full
-  50-state coverage.
+- The seed `sources.yaml` lists all **50 states** (portal index +
+  **general_tax**) and pilot program pages for **CA / NY / TX**. Replace
+  broken URLs as sites move; use **Run ingestion** / **monitor** for upkeep.
 - No multi-tenant RBAC yet (the Admin page is cosmetic).
 
 ## Future roadmap

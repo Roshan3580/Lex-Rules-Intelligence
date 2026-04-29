@@ -1,82 +1,367 @@
-# Curated seed list of official state tax sources used by /api/ingest/run.
+# State tax corpus — aligned to Engineer Brief (Product Overview v2)
 #
-# Each entry is fetched, cleaned, chunked, and run through rule extraction.
-# Already-ingested sources are skipped via SHA-256 checksum.
+# §4.5 / §7 — Ingestion: POST /api/ingest/run batches this list; checksum dedupe skips
+#            unchanged text; POST /api/monitor/run re-fetches URL-backed rows.
+# §4.1 / §5 — Each row tags jurisdiction (`state`) + program bucket (`tax_type`) so
+#            search and /api/query can filter. `general_tax` marks a multi-program
+#            state portal entry; pilot rows add authoritative program pages.
+# §4.2     — Prefer direct form/filing/bulletin URLs where you add them (PDF rows OK).
 #
-# Add more entries here as you onboard new states. Prefer authoritative
-# state-government domains (.gov, .ca.gov, etc).
+# Expand by appending rows; keep URLs current (sites move; monitor surfaces failures).
 
 sources:
-  # ---------------------------- California -----------------------------
-  - name: "CDTFA — Sales and Use Tax in California"
+  - name: "Alabama Department of Revenue"
+    url: "https://www.revenue.alabama.gov/"
+    state: "Alabama"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Alaska Department of Revenue — Tax Division"
+    url: "https://tax.alaska.gov/"
+    state: "Alaska"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Arizona Department of Revenue"
+    url: "https://azdor.gov/"
+    state: "Arizona"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Arkansas Department of Finance and Administration — Taxes"
+    url: "https://www.dfa.arkansas.gov/excise-tax/"
+    state: "Arkansas"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "California Tax Service Center"
+    url: "https://taxes.ca.gov/"
+    state: "California"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "California CDTFA — Taxes and Fees"
+    url: "https://www.cdtfa.ca.gov/taxes-and-fees/"
+    state: "California"
+    tax_type: "sales_tax"
+    source_type: "webpage"
+
+  - name: "Colorado Department of Revenue — Taxation"
+    url: "https://tax.colorado.gov/"
+    state: "Colorado"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Connecticut Department of Revenue Services"
+    url: "https://portal.ct.gov/drs"
+    state: "Connecticut"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Delaware Division of Revenue"
+    url: "https://revenue.delaware.gov/"
+    state: "Delaware"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Florida Department of Revenue"
+    url: "https://floridarevenue.com/"
+    state: "Florida"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Georgia Department of Revenue"
+    url: "https://dor.georgia.gov/"
+    state: "Georgia"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Hawaii Department of Taxation"
+    url: "https://tax.hawaii.gov/"
+    state: "Hawaii"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Idaho State Tax Commission"
+    url: "https://tax.idaho.gov/"
+    state: "Idaho"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Illinois Department of Revenue"
+    url: "https://tax.illinois.gov/"
+    state: "Illinois"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Indiana Department of Revenue"
+    url: "https://www.in.gov/dor/"
+    state: "Indiana"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Iowa Department of Revenue"
+    url: "https://tax.iowa.gov/"
+    state: "Iowa"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Kansas Department of Revenue"
+    url: "https://www.ksrevenue.gov/"
+    state: "Kansas"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Kentucky Department of Revenue"
+    url: "https://revenue.ky.gov/"
+    state: "Kentucky"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Louisiana Department of Revenue"
+    url: "https://revenue.louisiana.gov/"
+    state: "Louisiana"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Maine Revenue Services"
+    url: "https://www.maine.gov/revenue/"
+    state: "Maine"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Maryland Comptroller — Taxes"
+    url: "https://www.marylandtaxes.gov/"
+    state: "Maryland"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Massachusetts Department of Revenue"
+    url: "https://www.mass.gov/orgs/massachusetts-department-of-revenue"
+    state: "Massachusetts"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Michigan Department of Treasury — Taxes"
+    url: "https://www.michigan.gov/taxes"
+    state: "Michigan"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Minnesota Department of Revenue"
+    url: "https://www.revenue.state.mn.us/"
+    state: "Minnesota"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Mississippi Department of Revenue"
+    url: "https://www.dor.ms.gov/"
+    state: "Mississippi"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Missouri Department of Revenue — Taxation"
+    url: "https://dor.mo.gov/taxation/"
+    state: "Missouri"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Montana Department of Revenue"
+    url: "https://mtrevenue.gov/"
+    state: "Montana"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Nebraska Department of Revenue"
+    url: "https://revenue.nebraska.gov/"
+    state: "Nebraska"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Nevada Department of Taxation"
+    url: "https://tax.nv.gov/"
+    state: "Nevada"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "New Hampshire Department of Revenue Administration"
+    url: "https://www.revenue.nh.gov/"
+    state: "New Hampshire"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "New Jersey Division of Taxation"
+    url: "https://www.nj.gov/treasury/taxation/"
+    state: "New Jersey"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "New Mexico Taxation and Revenue Department"
+    url: "https://www.tax.newmexico.gov/"
+    state: "New Mexico"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "New York Department of Taxation and Finance"
+    url: "https://www.tax.ny.gov/"
+    state: "New York"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "North Carolina Department of Revenue"
+    url: "https://www.ncdor.gov/"
+    state: "North Carolina"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "North Dakota Office of State Tax Commissioner"
+    url: "https://www.tax.nd.gov/"
+    state: "North Dakota"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Ohio Department of Taxation"
+    url: "https://tax.ohio.gov/"
+    state: "Ohio"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Oklahoma Tax Commission"
+    url: "https://oklahoma.gov/tax.html"
+    state: "Oklahoma"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Oregon Department of Revenue"
+    url: "https://www.oregon.gov/dor/"
+    state: "Oregon"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Pennsylvania Department of Revenue"
+    url: "https://www.pa.gov/agencies/revenue.html"
+    state: "Pennsylvania"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Rhode Island Division of Taxation"
+    url: "https://tax.ri.gov/"
+    state: "Rhode Island"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "South Carolina Department of Revenue"
+    url: "https://dor.sc.gov/"
+    state: "South Carolina"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "South Dakota Department of Revenue"
+    url: "https://dor.sd.gov/"
+    state: "South Dakota"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Tennessee Department of Revenue"
+    url: "https://www.tn.gov/revenue.html"
+    state: "Tennessee"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Texas Comptroller — Taxes"
+    url: "https://comptroller.texas.gov/taxes/"
+    state: "Texas"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Utah State Tax Commission"
+    url: "https://tax.utah.gov/"
+    state: "Utah"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Vermont Department of Taxes"
+    url: "https://tax.vermont.gov/"
+    state: "Vermont"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Virginia Tax"
+    url: "https://www.tax.virginia.gov/"
+    state: "Virginia"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Washington Department of Revenue"
+    url: "https://dor.wa.gov/"
+    state: "Washington"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "West Virginia State Tax Department"
+    url: "https://tax.wv.gov/"
+    state: "West Virginia"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Wisconsin Department of Revenue"
+    url: "https://www.revenue.wi.gov/"
+    state: "Wisconsin"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  - name: "Wyoming Department of Revenue"
+    url: "https://revenue.wyo.gov/"
+    state: "Wyoming"
+    tax_type: "general_tax"
+    source_type: "webpage"
+
+  # --------------------------------------------------------------------------
+  # Pilot program depth — CA / NY / TX (brief §4.1: program-specific sources)
+  # --------------------------------------------------------------------------
+  - name: "California CDTFA — Sales and Use Tax Programs"
     url: "https://www.cdtfa.ca.gov/taxes-and-fees/sutprograms.htm"
     state: "California"
     tax_type: "sales_tax"
     source_type: "webpage"
 
-  - name: "CDTFA — Filing Dates for Sales & Use Tax Returns"
-    url: "https://www.cdtfa.ca.gov/taxes-and-fees/filing-dates.htm"
-    state: "California"
-    tax_type: "sales_tax"
-    source_type: "webpage"
-
-  - name: "EDD — Required Filings and Due Dates"
+  - name: "California EDD — Payroll tax required filings"
     url: "https://edd.ca.gov/en/payroll_taxes/required_filings_and_due_dates/"
     state: "California"
     tax_type: "payroll_tax"
     source_type: "webpage"
 
-  - name: "FTB — Corporations Filing Information"
-    url: "https://www.ftb.ca.gov/file/business/types/corporations/index.html"
-    state: "California"
-    tax_type: "corporate_tax"
-    source_type: "webpage"
-
-  # ----------------------------- New York ------------------------------
-  - name: "NYS Tax — Sales and Use Tax for Businesses"
+  - name: "New York — Sales and use tax overview"
     url: "https://www.tax.ny.gov/bus/st/stidx.htm"
     state: "New York"
     tax_type: "sales_tax"
     source_type: "webpage"
 
-  - name: "NYS Tax — Sales Tax Filing Requirements"
-    url: "https://www.tax.ny.gov/bus/st/file_sales_tax_returns.htm"
+  - name: "New York — Sales tax return filing"
+    url: "https://www.tax.ny.gov/bus/st/filing_sales_tax_returns.htm"
     state: "New York"
     tax_type: "sales_tax"
     source_type: "webpage"
 
-  - name: "NYS Tax — Withholding Tax for Employers"
-    url: "https://www.tax.ny.gov/bus/wt/whtidx.htm"
+  - name: "New York — Employer withholding tax"
+    url: "https://www.tax.ny.gov/bus/wt/wtidx.htm"
     state: "New York"
     tax_type: "withholding"
     source_type: "webpage"
 
-  - name: "NYS Tax — Corporation Tax Resource Center"
-    url: "https://www.tax.ny.gov/bus/ct/ctidx.htm"
-    state: "New York"
-    tax_type: "corporate_tax"
-    source_type: "webpage"
-
-  # ------------------------------ Texas --------------------------------
-  - name: "Texas Comptroller — Sales and Use Tax"
+  - name: "Texas Comptroller — Sales and use tax"
     url: "https://comptroller.texas.gov/taxes/sales/"
     state: "Texas"
     tax_type: "sales_tax"
     source_type: "webpage"
 
-  - name: "Texas Comptroller — Sales Tax Filing Due Dates"
-    url: "https://comptroller.texas.gov/taxes/file-pay/due-dates.php"
-    state: "Texas"
-    tax_type: "sales_tax"
-    source_type: "webpage"
-
-  - name: "Texas Comptroller — Franchise Tax"
+  - name: "Texas Comptroller — Franchise tax"
     url: "https://comptroller.texas.gov/taxes/franchise/"
     state: "Texas"
     tax_type: "franchise_tax"
     source_type: "webpage"
 
-  - name: "Texas Workforce Commission — Unemployment Tax"
+  - name: "Texas Workforce Commission — Unemployment tax"
     url: "https://www.twc.texas.gov/businesses/unemployment-tax"
     state: "Texas"
     tax_type: "payroll_tax"

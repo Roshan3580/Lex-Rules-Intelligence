@@ -5,6 +5,7 @@
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") ?? "";
 
 export type TaxType =
+  | "general_tax"
   | "sales_tax"
   | "payroll_tax"
   | "corporate_tax"
@@ -128,6 +129,67 @@ export interface AnalyticsResponse {
   summary: AnalyticsSummary;
 }
 
+export interface ViolationSource {
+  source_id?: string | null;
+  source_url?: string | null;
+  snippet?: string | null;
+}
+
+export interface SubmissionViolation {
+  rule_id: string;
+  rule_title: string;
+  reason: string;
+  required_action: string;
+  required_documentation: string[];
+  confidence: number;
+  source: ViolationSource;
+  conditions_met: string[];
+  conditions_failed: string[];
+}
+
+export interface ValidateSubmissionResponse {
+  valid: boolean;
+  risk_level: string;
+  violations: SubmissionViolation[];
+  warnings: string[];
+  passed_rules: { rule_id: string; rule_title: string }[];
+  explanation: string;
+}
+
+export interface OutcomeEvent {
+  id: string;
+  submission_id?: string | null;
+  state: string;
+  tax_category: string;
+  workflow_stage?: string | null;
+  rejection_code?: string | null;
+  rejection_reason: string;
+  normalized_root_cause?: string | null;
+  payload?: Record<string, unknown> | null;
+  matched_rule_ids: string[];
+  coverage_status: string;
+  created_at: string;
+}
+
+export interface OutcomeCreateResponse {
+  outcome: OutcomeEvent;
+  coverage_status: string;
+  matched_rule_ids: string[];
+  validation_at_outcome: {
+    valid: boolean;
+    risk_level: string;
+    violation_rule_ids: string[];
+  };
+}
+
+export interface RejectionCoverageResponse {
+  total_outcomes: number;
+  by_coverage_status: { coverage_status: string; count: number }[];
+  top_rejection_reasons: { reason: string; count: number }[];
+  missing_rule_clusters: { label: string; count: number }[];
+  coverage_percentage: number;
+}
+
 export interface ReviewAuditEvent {
   id: string;
   rule_id: string;
@@ -172,6 +234,7 @@ export interface Rule {
   operating_scenario?: string | null;
   condition_logic?: string | null;
   submission_method?: string | null;
+  program_variant?: Record<string, unknown> | null;
   rule_title: string;
   rule_summary: string;
   detailed_rule?: string | null;
@@ -186,6 +249,7 @@ export interface Rule {
   source_document_name?: string | null;
   source_snippet?: string | null;
   effective_date?: string | null;
+  effective_date_end?: string | null;
   confidence_score: number;
   review_status: ReviewStatus;
   extraction_method?: string | null;
@@ -462,6 +526,113 @@ export const api = {
       `/api/analytics${days != null ? `?days=${days}` : ""}`,
     ),
 
+  rejectionCoverage: () =>
+    request<RejectionCoverageResponse>("/api/analytics/rejection-coverage"),
+
+  rejectionPatterns: () =>
+    request<RejectionPatternsResponse>("/api/analytics/rejection-patterns"),
+
+  submissionPath: (params: {
+    state: string;
+    tax_category: string;
+    workflow_stage?: string;
+    transaction_type?: string;
+  }) => {
+    const q = new URLSearchParams();
+    q.set("state", params.state);
+    q.set("tax_category", params.tax_category);
+    if (params.workflow_stage) q.set("workflow_stage", params.workflow_stage);
+    if (params.transaction_type) q.set("transaction_type", params.transaction_type);
+    return request<SubmissionPathResponse>(`/api/submission-path?${q}`);
+  },
+
+  workflowStart: (payload: {
+    state?: string;
+    tax_category?: string;
+    title?: string;
+    validation_payload?: Record<string, unknown>;
+  }) =>
+    request<CaseWorkflow>(
+      "/api/workflows/start",
+      { method: "POST", json: payload },
+    ),
+
+  workflowAdvance: (
+    caseId: string,
+    payload?: { validation_payload?: Record<string, unknown>; actor?: string },
+  ) =>
+    request<WorkflowAdvanceResponse>(
+      `/api/workflows/${encodeURIComponent(caseId)}/advance`,
+      { method: "POST", json: payload ?? {} },
+    ),
+
+  platformKpis: () => request<KpiSummary>("/api/platform/kpis"),
+
+  webhookSubscriptions: (activeOnly = false) =>
+    request<WebhookSubscriptionRow[]>(
+      `/api/webhooks/subscriptions?active_only=${activeOnly}`,
+    ),
+
+  webhookDeliveries: (params?: {
+    status?: string;
+    event_type?: string;
+    limit?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.event_type) q.set("event_type", params.event_type);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return request<WebhookDeliveriesList>(
+      `/api/webhooks/deliveries${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  demoReset: () =>
+    request<{ deleted_outcomes: number; status: string }>("/api/demo/reset", {
+      method: "POST",
+    }),
+
+  validateSubmission: (payload: {
+    state: string;
+    tax_category: string;
+    workflow_stage?: string;
+    effective_date?: string;
+    program_variant?: Record<string, unknown>;
+    payload: Record<string, unknown>;
+  }) =>
+    request<ValidateSubmissionResponse>("/api/validate-submission", {
+      method: "POST",
+      json: payload,
+    }),
+
+  createOutcome: (payload: {
+    submission_id?: string;
+    state: string;
+    tax_category: string;
+    workflow_stage?: string;
+    effective_date?: string;
+    rejection_code?: string;
+    rejection_reason: string;
+    payload?: Record<string, unknown>;
+  }) =>
+    request<OutcomeCreateResponse>("/api/outcomes", { method: "POST", json: payload }),
+
+  listOutcomes: (params?: {
+    state?: string;
+    tax_category?: string;
+    coverage_status?: string;
+    limit?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.state) q.set("state", params.state);
+    if (params?.tax_category) q.set("tax_category", params.tax_category);
+    if (params?.coverage_status) q.set("coverage_status", params.coverage_status);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return request<OutcomeEvent[]>(`/api/outcomes${qs ? `?${qs}` : ""}`);
+  },
+
   monitorRun: (payload?: { source_ids?: string[]; limit?: number; auto_extract?: boolean }) =>
     request<IngestRunResult>("/api/monitor/run", {
       method: "POST",
@@ -491,11 +662,13 @@ export const api = {
     state?: string;
     tax_type?: TaxType;
     review_status?: ReviewStatus;
+    workflow_stage?: string;
   }) => {
     const q = new URLSearchParams();
     if (params?.state) q.set("state", params.state);
     if (params?.tax_type) q.set("tax_type", params.tax_type);
     if (params?.review_status) q.set("review_status", params.review_status);
+    if (params?.workflow_stage) q.set("workflow_stage", params.workflow_stage);
     const qs = q.toString();
     return request<Rule[]>(`/api/rules${qs ? `?${qs}` : ""}`);
   },
@@ -734,9 +907,73 @@ export interface CaseWorkflow {
   created_at: string;
   updated_at: string;
   completed_at?: string | null;
+  validation_payload?: Record<string, unknown> | null;
+}
+
+export interface SubmissionPathResponse {
+  recommended_path: string;
+  steps: string[];
+  required_documents: string[];
+  submission_methods: string[];
+  ranked_options: Record<string, unknown>[];
+  portal_urls?: string[];
+  transaction_type?: string | null;
+}
+
+export interface WorkflowAdvanceResponse {
+  blocked: boolean;
+  case?: Record<string, unknown> | CaseWorkflow | null;
+  validation?: Record<string, unknown> | null;
+}
+
+export interface RejectionPatternRow {
+  state: string;
+  tax_category: string;
+  coverage_status: string;
+  count: number;
+}
+
+export interface RejectionPatternsResponse {
+  by_state: RejectionPatternRow[];
+  by_tax_category: RejectionPatternRow[];
+  by_coverage: RejectionPatternRow[];
+  rule_coverage_report: Record<string, number>;
+}
+
+export interface KpiSummary {
+  rules_published: number;
+  outcome_events: number;
+  active_sources: number;
+}
+
+export interface WebhookSubscriptionRow {
+  id: string;
+  url: string;
+  events: string[];
+  active: boolean;
+  secret_hint?: string | null;
+}
+
+export interface WebhookDeliveryRow {
+  id: string;
+  subscription_id: string;
+  event_type: string;
+  status: string;
+  attempt_count: number;
+  last_error?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface WebhookDeliveriesList {
+  deliveries: WebhookDeliveryRow[];
 }
 
 export const TAX_TYPES: { value: TaxType; label: string }[] = [
+  {
+    value: "general_tax",
+    label: "General / state portal",
+  },
   { value: "sales_tax", label: "Sales tax" },
   { value: "payroll_tax", label: "Payroll tax" },
   { value: "corporate_tax", label: "Corporate tax" },

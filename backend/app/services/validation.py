@@ -30,6 +30,7 @@ from .. import models
 # ---------------------------------------------------------------------------
 
 VALID_TAX_CATEGORIES: set[str] = {
+    "general_tax",
     "sales_tax",
     "payroll_tax",
     "corporate_tax",
@@ -69,6 +70,8 @@ VALID_REVIEW_STATUSES: set[str] = {
 # Confidence policy thresholds (Phase 4 spec).
 THRESHOLD_AUTO_VALIDATED = 0.80
 THRESHOLD_NEEDS_REVIEW = 0.55
+# Engineer brief §8 — publishing discipline: no publish below this confidence.
+MIN_PUBLISH_CONFIDENCE = 0.70
 
 
 # ---------------------------------------------------------------------------
@@ -258,21 +261,34 @@ def compute_review_status(confidence: float, result: ValidationResult) -> str:
 
 
 def can_publish(rule: models.Rule) -> tuple[bool, list[str]]:
-    """Hard gate for the `publish` review action.
+    """Hard gate for the ``publish`` review action (brief §7–§8 governance).
 
-    A rule can only be published when (a) it currently passes validation
-    and (b) review_status is approved or auto_validated. The caller (review
-    router) enforces this — never publish automatically from extraction.
+    Requires: schema validation pass, minimum confidence, and **human
+    ``approved``** (or idempotent re-publish when already ``published``).
+    ``auto_validated`` alone is not enough — an explicit approve step records
+    reviewer intent in the audit trail.
     """
     payload = _rule_to_payload(rule)
     res = validate_rule_payload(payload, raw_confidence=rule.confidence_score)
     blockers: list[str] = []
     if not res.valid:
         blockers.extend(res.errors)
-    if rule.review_status not in {"approved", "auto_validated", "published"}:
+    st = rule.review_status
+    if st == "published":
+        pass
+    elif st != "approved":
         blockers.append(
-            f"current review_status '{rule.review_status}' is not approved/auto_validated"
+            "publish requires human approve first (review_status must be 'approved')"
         )
+    if rule.confidence_score < MIN_PUBLISH_CONFIDENCE:
+        blockers.append(
+            f"confidence {rule.confidence_score:.2f} is below minimum "
+            f"{MIN_PUBLISH_CONFIDENCE:.2f} for publishing"
+        )
+    # Optional governance (effective_date, lineage) via settings.strict_publish_checks.
+    from . import governance_service
+
+    blockers.extend(governance_service.strict_publish_blockers(rule))
     return (not blockers), blockers
 
 
@@ -291,6 +307,9 @@ def _rule_to_payload(rule: models.Rule) -> dict[str, Any]:
         "source_url": rule.source_url,
         "source_document_name": rule.source_document_name,
         "source_snippet": rule.source_snippet,
+        "program_variant": rule.program_variant,
+        "effective_date": rule.effective_date,
+        "effective_date_end": rule.effective_date_end,
     }
 
 

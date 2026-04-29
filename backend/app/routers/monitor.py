@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..services import monitor_service
+from ..services import impact_service, monitor_service
 from .ingest import _item_from_db
 
 router = APIRouter(prefix="/api/monitor", tags=["monitor"])
@@ -44,3 +44,8 @@ def monitor_run(
         items=[_item_from_db(it) for it in items_db],
         run_id=run.id,
     )
+
+
+@router.post("/impact")
+def monitor_impact(source_id: str = Query(...), db: Session = Depends(get_db)):
+    return impact_service.analyze_source_impact(db, source_id=source_id)

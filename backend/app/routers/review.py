@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import schemas
@@ -35,10 +35,10 @@ def edit_rule(
 def rule_action(
     rule_id: str,
     payload: schemas.ReviewActionRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    # Hard gate: publish requires validation to pass and the rule to be
-    # in approved/auto_validated. We never publish straight from extraction.
+    # Publish gate: validation + confidence + human approve (brief §8).
     if payload.action == "publish":
         existing = review_service.get_rule(db, rule_id)
         if existing is None:
@@ -65,6 +65,34 @@ def rule_action(
         raise HTTPException(status_code=404, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    from ..services import audit_service
+
+    if payload.action in ("publish", "approve", "reject", "edit"):
+        audit_service.log(
+            db,
+            action=payload.action,
+            resource_type="rule",
+            resource_id=rule_id,
+            actor=payload.actor,
+            detail={"notes": payload.notes},
+        )
+
+    if payload.action == "publish":
+        from ..services import webhook_delivery_service
+
+        webhook_delivery_service.schedule_send_event(
+            background_tasks,
+            "rule.published",
+            {
+                "rule_id": rule.id,
+                "rule_title": rule.rule_title,
+                "state": rule.state,
+                "tax_category": rule.tax_category,
+                "review_status": rule.review_status,
+            },
+        )
+
     return schemas.RuleOut.model_validate(rule)
 
 

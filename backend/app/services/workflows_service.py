@@ -531,6 +531,7 @@ def _case_payload(case: models.CaseWorkflow, include_events: bool = True) -> dic
         "created_at": case.created_at,
         "updated_at": case.updated_at,
         "completed_at": case.completed_at,
+        "validation_payload": case.validation_payload,
     }
     if include_events:
         payload["events"] = [

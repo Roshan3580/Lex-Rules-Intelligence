@@ -15,9 +15,26 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import SessionLocal, init_db
-from .routers import admin, analytics, dashboard, ingest, meta, monitor, questions, review, rules, sources, workflows
+from .routers import (
+    admin,
+    analytics,
+    dashboard,
+    demo,
+    ingest,
+    meta,
+    monitor,
+    platform,
+    questions,
+    review,
+    rules,
+    sources,
+    submission_intel,
+    validation,
+    webhooks,
+    workflows,
+)
 from .schemas import HealthOut
-from .seed import seed_if_empty
+from .seed import ensure_demo_enforcement_rules, seed_if_empty
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -51,8 +68,13 @@ def create_app() -> FastAPI:
     app.include_router(rules.router)
     app.include_router(questions.router)
     app.include_router(review.router)
+    app.include_router(validation.router)
     app.include_router(ingest.router)
     app.include_router(workflows.router)
+    app.include_router(submission_intel.router)
+    app.include_router(webhooks.router)
+    app.include_router(platform.router)
+    app.include_router(demo.router)
     app.include_router(admin.router)
     app.include_router(dashboard.router)
     app.include_router(analytics.router)
@@ -62,9 +84,11 @@ def create_app() -> FastAPI:
     def _startup() -> None:
         init_db()
         with SessionLocal() as db:
-            from .services import workflows_service
+            from .services import governance_service, workflows_service
 
             workflows_service.ensure_default_templates(db)
+            governance_service.ensure_jurisdiction_seed(db)
+            governance_service.ensure_rejection_reason_seed(db)
         if settings.demo_mode:
             with SessionLocal() as db:
                 inserted = seed_if_empty(db)
@@ -75,7 +99,13 @@ def create_app() -> FastAPI:
                     )
                 else:
                     logger.info(
-                        "DEMO_MODE: rules table already populated, skipping seed"
+                        "DEMO_MODE: rules table already populated, skipping full seed"
+                    )
+                ensured = ensure_demo_enforcement_rules(db)
+                if ensured:
+                    logger.info(
+                        "DEMO_MODE: ensured %d Submission Validator enforcement demo rule(s)",
+                        ensured,
                     )
         else:
             logger.info(
@@ -88,6 +118,16 @@ def create_app() -> FastAPI:
             settings.llm_model if settings.llm_enabled else "fallback",
             settings.demo_mode,
         )
+        from .services import scheduler_service
+
+        scheduler_service.configure_scheduler()
+
+
+    @app.on_event("shutdown")
+    def _shutdown() -> None:
+        from .services import scheduler_service
+
+        scheduler_service.shutdown_scheduler()
 
     @app.get("/api/health", response_model=HealthOut)
     def health() -> HealthOut:

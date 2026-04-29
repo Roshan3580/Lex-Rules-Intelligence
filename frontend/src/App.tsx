@@ -13,6 +13,14 @@ import ReviewQueue from "./pages/app/ReviewQueue";
 import Workflows from "./pages/app/Workflows";
 import Analytics from "./pages/app/Analytics";
 import Admin from "./pages/app/Admin";
+import SubmissionValidator from "./pages/app/SubmissionValidator";
+import Outcomes from "./pages/app/Outcomes";
+import SubmissionPath from "./pages/app/SubmissionPath";
+import WorkflowRunner from "./pages/app/WorkflowRunner";
+import Rejections from "./pages/app/Rejections";
+import Onboarding from "./pages/app/Onboarding";
+import DemoGuide from "./pages/app/DemoGuide";
+import WebhooksPage from "./pages/app/Webhooks";
 
 const queryClient = new QueryClient();
 
@@ -31,6 +39,14 @@ const App = () => (
             <Route path="review" element={<ReviewQueue />} />
             <Route path="workflows" element={<Workflows />} />
             <Route path="analytics" element={<Analytics />} />
+            <Route path="validate" element={<SubmissionValidator />} />
+            <Route path="outcomes" element={<Outcomes />} />
+            <Route path="submission" element={<SubmissionPath />} />
+            <Route path="workflow-runner" element={<WorkflowRunner />} />
+            <Route path="rejections" element={<Rejections />} />
+            <Route path="onboarding" element={<Onboarding />} />
+            <Route path="demo" element={<DemoGuide />} />
+            <Route path="webhooks" element={<WebhooksPage />} />
             <Route path="admin" element={<Admin />} />
           </Route>
           <Route path="*" element={<NotFound />} />

@@ -73,6 +73,35 @@ DEADLINE_RE = re.compile(
 FORM_RE = re.compile(r"\bForm\s+([A-Z0-9][A-Z0-9-]{1,15})\b")
 
 
+def _program_variant_for_rule(source: models.Source, rule_dict: dict[str, Any]) -> dict[str, Any]:
+    """Engineer brief §6 — program / variant metadata tied to the source."""
+    base: dict[str, Any] = {}
+    if source.state:
+        base["jurisdiction"] = source.state
+    if source.tax_category:
+        base["tax_program"] = source.tax_category
+    if source.name:
+        base["source_name"] = source.name
+    extra = rule_dict.get("program_variant")
+    if isinstance(extra, dict):
+        merged = {**base}
+        for k, v in extra.items():
+            merged[str(k)] = v
+        return merged
+    return base
+
+
+def _effective_date_end(rule_dict: dict[str, Any]) -> Optional[str]:
+    for key in ("effective_date_end", "effective_end", "sunset_date"):
+        v = rule_dict.get(key)
+        if v is None:
+            continue
+        s = str(v).strip()
+        if s:
+            return s[:64]
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
@@ -328,11 +357,13 @@ def _persist_llm_rule(
         source_document_name=source.name,
         source_snippet=payload["source_snippet"],
         effective_date=rule_dict.get("effective_date"),
+        effective_date_end=_effective_date_end(rule_dict),
         confidence_score=res.adjusted_confidence,
         review_status=res.suggested_review_status,
         extraction_method="llm",
         validation_errors=res.errors or None,
         validation_warnings=res.warnings or None,
+        program_variant=_program_variant_for_rule(source, rule_dict),
         lineage={
             "extracted_from_chunk_ids": chunk_ids or [],
             "source_version_id": source_version_id,
@@ -467,6 +498,7 @@ def _extract_with_heuristics(
             extraction_method="heuristic",
             validation_errors=res.errors or None,
             validation_warnings=res.warnings or None,
+            program_variant=_program_variant_for_rule(source, {}),
             lineage={
                 "extracted_from_chunk_ids": [chunk.id],
                 "source_version_id": sv_id,

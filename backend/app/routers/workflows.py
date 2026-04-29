@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
-from ..services import workflows_service
+from ..services import workflow_engine, workflows_service
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
@@ -91,6 +91,47 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
     return case
+
+
+@router.post("/start", response_model=schemas.CaseWorkflowOut)
+def workflow_start(
+    payload: schemas.WorkflowStartBody,
+    db: Session = Depends(get_db),
+):
+    try:
+        return workflow_engine.run_start(
+            db,
+            state=payload.state,
+            tax_category=payload.tax_category,
+            title=payload.title,
+            org=payload.org,
+            template_id=payload.template_id,
+            case_id=payload.case_id,
+            actor=payload.actor,
+            validation_payload=payload.validation_payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/{case_identifier}/advance", response_model=schemas.WorkflowAdvanceOut)
+def workflow_advance(
+    case_identifier: str,
+    payload: schemas.WorkflowAdvanceBody,
+    db: Session = Depends(get_db),
+):
+    try:
+        return workflow_engine.advance(
+            db,
+            case_identifier,
+            validation_payload=payload.validation_payload,
+            actor=payload.actor,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=404 if "not found" in str(exc).lower() else 400,
+            detail=str(exc),
+        )
 
 
 @router.patch("/cases/{case_id}/steps", response_model=schemas.CaseWorkflowOut)

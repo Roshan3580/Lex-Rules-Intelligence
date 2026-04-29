@@ -10,6 +10,8 @@ snippet so the explainability story is intact.
 
 from __future__ import annotations
 
+import json
+
 from sqlalchemy.orm import Session
 
 from . import models
@@ -141,6 +143,99 @@ SEED_SOURCES = [
 # Pre-baked normalized rules
 # ---------------------------------------------------------------------------
 
+# Fixed titles used to idempotently upsert Submission Validator demos.
+_CA_ENFORCEMENT_DEMO_RULE_TITLES = (
+    "CA Sales Tax — CDTFA-401-A required at submission (demo)",
+    "CA Sales Tax — LLC / high-amount Schedule R (demo)",
+)
+
+
+def _ca_enforcement_demo_rules(source: models.Source) -> list[models.Rule]:
+    """submission-stage demos for risky CA preset (documents + conditional Schedule R)."""
+    return [
+        models.Rule(
+            state="California",
+            tax_category="sales_tax",
+            workflow_stage="submission",
+            rule_category="enforcement_demo",
+            rule_title="CA Sales Tax — CDTFA-401-A required at submission (demo)",
+            rule_summary=(
+                "Demo gate: portal submissions for California sales tax at the "
+                "submission stage must include CDTFA-401-A."
+            ),
+            detailed_rule=(
+                "Illustrative enforcement rule for demos. Attach CDTFA-401-A "
+                "(Sales and Use Tax Supplement) before submitting."
+            ),
+            conditions=["California sales tax submission via portal"],
+            required_actions=["Attach CDTFA-401-A before submission"],
+            required_forms=[],
+            required_documentation=["CDTFA-401-A"],
+            deadlines=[],
+            exceptions=None,
+            source_id=source.id,
+            source_url=source.url,
+            source_document_name=source.name,
+            source_snippet=(
+                "Demo: California sales tax submissions must include form "
+                "CDTFA-401-A (illustrative)."
+            ),
+            effective_date="2024-01-01",
+            confidence_score=0.91,
+            review_status="published",
+            extraction_method="seed",
+        ),
+        models.Rule(
+            state="California",
+            tax_category="sales_tax",
+            workflow_stage="submission",
+            rule_category="enforcement_demo",
+            rule_title="CA Sales Tax — LLC / high-amount Schedule R (demo)",
+            rule_summary=(
+                "Demo threshold rule: LLC filers with taxable amount over $10,000 "
+                "must include Schedule R (demo form name)."
+            ),
+            detailed_rule=(
+                "Illustrative JSON condition_logic: entity_type LLC and amount "
+                "greater than 10000 triggers Schedule R attachment."
+            ),
+            conditions=["LLC with amount over $10,000"],
+            required_actions=["Attach Schedule R for high-amount LLC filings"],
+            required_forms=["Schedule R (demo)"],
+            required_documentation=[],
+            deadlines=[],
+            exceptions=None,
+            condition_logic=json.dumps(
+                {
+                    "op": "and",
+                    "items": [
+                        {
+                            "op": "equals",
+                            "field": "entity_type",
+                            "value": "LLC",
+                        },
+                        {
+                            "op": "greater_than",
+                            "field": "amount",
+                            "value": 10000,
+                        },
+                    ],
+                }
+            ),
+            source_id=source.id,
+            source_url=source.url,
+            source_document_name=source.name,
+            source_snippet=(
+                "Demo: combined LLC + amount threshold requires Schedule R "
+                "(illustrative)."
+            ),
+            effective_date="2024-01-01",
+            confidence_score=0.89,
+            review_status="published",
+            extraction_method="seed",
+        ),
+    ]
+
 
 def _ca_rules(source: models.Source) -> list[models.Rule]:
     return [
@@ -260,6 +355,7 @@ def _ca_rules(source: models.Source) -> list[models.Rule]:
             review_status="approved",
             extraction_method="seed",
         ),
+        *_ca_enforcement_demo_rules(source),
     ]
 
 
@@ -496,6 +592,61 @@ def _ny_rules(source: models.Source) -> list[models.Rule]:
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
+
+def _resolve_ca_demo_source(db: Session) -> models.Source:
+    """Source row for tying demo enforcement rules (reuse seed bulletin when possible)."""
+    spec = next(x for x in SEED_SOURCES if x["state"] == "California")
+    hit = db.query(models.Source).filter(models.Source.url == spec["url"]).first()
+    if hit is not None:
+        return hit
+    fb = (
+        db.query(models.Source)
+        .filter(models.Source.state == "California")
+        .order_by(models.Source.created_at.asc())
+        .first()
+    )
+    if fb is not None:
+        return fb
+    src = models.Source(
+        source_type="text",
+        name=spec["name"],
+        url=spec["url"],
+        state=spec["state"],
+        tax_category=None,
+        raw_text=spec["text"],
+        status="processed",
+        meta={"seeded": True, "demo_enforcement_source": True},
+    )
+    db.add(src)
+    db.flush()
+    return src
+
+
+def ensure_demo_enforcement_rules(db: Session) -> int:
+    """Ensure Submission Validator CA demos exist even when the DB already had rules.
+
+    ``seed_if_empty`` intentionally skips inserts when ``rules.count() > 0``, but
+    those earlier rows are often ingestion rules scoped to intake with non-JSON
+    ``condition_logic`` — they never participate in submission-stage enforcement.
+    """
+    have = (
+        db.query(models.Rule.rule_title)
+        .filter(models.Rule.rule_title.in_(_CA_ENFORCEMENT_DEMO_RULE_TITLES))
+        .all()
+    )
+    have_set = {r[0] for r in have}
+    missing_titles = [t for t in _CA_ENFORCEMENT_DEMO_RULE_TITLES if t not in have_set]
+    if not missing_titles:
+        return 0
+    src = _resolve_ca_demo_source(db)
+    by_title = {r.rule_title: r for r in _ca_enforcement_demo_rules(src)}
+    added = 0
+    for title in missing_titles:
+        db.add(by_title[title])
+        added += 1
+    db.commit()
+    return added
 
 
 def seed_if_empty(db: Session) -> int:

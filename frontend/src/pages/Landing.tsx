@@ -80,7 +80,7 @@ const Landing = () => {
             </div>
 
             <p className="mt-6 text-xs text-muted-foreground">
-              No credit card. Trusted by compliance teams at high-growth fintech & insurance.
+              Open the app to try ingestion, search, and review on your own sources.
             </p>
           </div>
 
@@ -141,18 +141,6 @@ const Landing = () => {
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Logos */}
-          <div className="mt-16 text-center">
-            <p className="text-[11px] uppercase tracking-widest text-muted-foreground/60 mb-6">
-              Trusted by operations teams
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4 opacity-50">
-              {["NORTHWIND", "ACME CAPITAL", "MERIDIAN", "VANTA HEALTH", "ATLAS PAY", "LUMEN"].map((l) => (
-                <span key={l} className="text-sm font-bold tracking-widest text-muted-foreground">{l}</span>
-              ))}
             </div>
           </div>
         </div>
@@ -273,13 +261,15 @@ const Landing = () => {
                 Ready to operationalize your rules?
               </h2>
               <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-                See how Lex transforms your regulatory workload in a 20-minute walkthrough.
+                Questions or a walkthrough? Reach out — we&apos;ll respond from the contact below.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
                 <Button asChild variant="hero" size="xl">
                   <Link to="/app">Open the dashboard <ArrowRight className="h-4 w-4" /></Link>
                 </Button>
-                <Button variant="outline" size="xl">Book a demo</Button>
+                <Button asChild variant="outline" size="xl">
+                  <a href="mailto:roshar1@uci.edu">Contact us</a>
+                </Button>
               </div>
             </div>
           </div>
@@ -287,18 +277,12 @@ const Landing = () => {
       </section>
 
       <footer className="border-t border-border/40 py-10">
-        <div className="container mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="container mx-auto px-6 flex items-center justify-center sm:justify-start">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <div className="h-6 w-6 rounded bg-gradient-primary flex items-center justify-center">
               <Sparkles className="h-3 w-3 text-primary-foreground" />
             </div>
             <span>© 2026 Lex Intelligence, Inc.</span>
-          </div>
-          <div className="flex items-center gap-6 text-sm text-muted-foreground">
-            <a href="#" className="hover:text-foreground">Security</a>
-            <a href="#" className="hover:text-foreground">Privacy</a>
-            <a href="#" className="hover:text-foreground">Terms</a>
-            <a href="#" className="hover:text-foreground">Status</a>
           </div>
         </div>
       </footer>

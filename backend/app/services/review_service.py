@@ -31,6 +31,7 @@ def list_rules(
     state: Optional[str] = None,
     tax_category: Optional[str] = None,
     review_status: Optional[str] = None,
+    workflow_stage: Optional[str] = None,
     needs_review_only: bool = False,
     limit: int = 200,
 ) -> list[models.Rule]:
@@ -41,6 +42,8 @@ def list_rules(
         q = q.filter(models.Rule.tax_category == tax_category)
     if review_status:
         q = q.filter(models.Rule.review_status == review_status)
+    if workflow_stage:
+        q = q.filter(models.Rule.workflow_stage == workflow_stage)
     if needs_review_only:
         q = q.filter(
             models.Rule.review_status.in_(["draft", "needs_review", "auto_validated"])

@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 TAX_CATEGORIES = [
+    "general_tax",  # jurisdiction-wide portal / index (engineer brief §4.1 program entry)
     "sales_tax",
     "payroll_tax",
     "corporate_tax",
@@ -128,6 +129,7 @@ class RuleBase(BaseModel):
     operating_scenario: Optional[str] = None
     condition_logic: Optional[str] = None
     submission_method: Optional[str] = None
+    program_variant: Optional[dict[str, Any]] = None
     rule_title: str
     rule_summary: str
     detailed_rule: Optional[str] = None
@@ -141,6 +143,7 @@ class RuleBase(BaseModel):
     source_document_name: Optional[str] = None
     source_snippet: Optional[str] = None
     effective_date: Optional[str] = None
+    effective_date_end: Optional[str] = None
     confidence_score: float = 0.0
     review_status: str = "draft"
 
@@ -158,6 +161,7 @@ class RuleUpdate(BaseModel):
     operating_scenario: Optional[str] = None
     condition_logic: Optional[str] = None
     submission_method: Optional[str] = None
+    program_variant: Optional[dict[str, Any]] = None
     rule_title: Optional[str] = None
     rule_summary: Optional[str] = None
     detailed_rule: Optional[str] = None
@@ -171,6 +175,7 @@ class RuleUpdate(BaseModel):
     source_document_name: Optional[str] = None
     source_snippet: Optional[str] = None
     effective_date: Optional[str] = None
+    effective_date_end: Optional[str] = None
     confidence_score: Optional[float] = None
     review_status: Optional[str] = None
 
@@ -706,6 +711,7 @@ class CaseWorkflowOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     completed_at: Optional[datetime] = None
+    validation_payload: Optional[dict[str, Any]] = None
 
 
 class CreateCaseRequest(BaseModel):
@@ -723,6 +729,226 @@ class UpdateStepRequest(BaseModel):
     completed: Optional[bool] = None
     notes: Optional[str] = None
     actor: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Submission enforcement & outcomes (deterministic, no LLM)
+# ---------------------------------------------------------------------------
+
+
+class ValidateSubmissionRequest(BaseModel):
+    state: str = Field(..., description="State name or USPS abbreviation (e.g. CA).")
+    tax_category: str
+    workflow_stage: Optional[str] = None
+    effective_date: Optional[str] = Field(
+        None, description="As-of date for effective range checks (YYYY-MM-DD)."
+    )
+    program_variant: Optional[dict[str, Any]] = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class ViolationSourceOut(BaseModel):
+    source_id: Optional[str] = None
+    source_url: Optional[str] = None
+    snippet: Optional[str] = None
+
+
+class SubmissionViolationOut(BaseModel):
+    rule_id: str
+    rule_title: str
+    reason: str
+    required_action: str
+    required_documentation: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
+    source: ViolationSourceOut
+    conditions_met: list[str] = Field(default_factory=list)
+    conditions_failed: list[str] = Field(default_factory=list)
+
+
+class PassedRuleOut(BaseModel):
+    rule_id: str
+    rule_title: str
+
+
+class ValidateSubmissionResponse(BaseModel):
+    valid: bool
+    risk_level: str = Field(..., description="high | medium | low")
+    violations: list[SubmissionViolationOut]
+    warnings: list[str] = Field(default_factory=list)
+    passed_rules: list[PassedRuleOut] = Field(default_factory=list)
+    explanation: str
+
+
+class OutcomeCreateRequest(BaseModel):
+    submission_id: Optional[str] = None
+    state: str
+    tax_category: str
+    workflow_stage: Optional[str] = None
+    effective_date: Optional[str] = None
+    rejection_code: Optional[str] = None
+    rejection_reason: str
+    payload: Optional[dict[str, Any]] = None
+
+
+class OutcomeValidationSnapshotOut(BaseModel):
+    valid: bool
+    risk_level: str
+    violation_rule_ids: list[str] = Field(default_factory=list)
+
+
+class OutcomeEventOut(BaseModel):
+    id: str
+    submission_id: Optional[str] = None
+    state: str
+    tax_category: str
+    workflow_stage: Optional[str] = None
+    rejection_code: Optional[str] = None
+    rejection_reason: str
+    normalized_root_cause: Optional[str] = None
+    payload: Optional[dict[str, Any]] = None
+    matched_rule_ids: list[str] = Field(default_factory=list)
+    coverage_status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class OutcomeCreateResponse(BaseModel):
+    outcome: OutcomeEventOut
+    coverage_status: str
+    matched_rule_ids: list[str] = Field(default_factory=list)
+    validation_at_outcome: OutcomeValidationSnapshotOut
+
+
+class RejectionCoverageRow(BaseModel):
+    coverage_status: str
+    count: int
+
+
+class RejectionReasonCount(BaseModel):
+    reason: str
+    count: int
+
+
+class MissingRuleCluster(BaseModel):
+    label: str
+    count: int
+
+
+class RejectionCoverageOut(BaseModel):
+    total_outcomes: int
+    by_coverage_status: list[RejectionCoverageRow]
+    top_rejection_reasons: list[RejectionReasonCount]
+    missing_rule_clusters: list[MissingRuleCluster]
+    coverage_percentage: float = Field(
+        ...,
+        description="Share of outcomes tagged prevented_by_existing_rule (percent).",
+    )
+
+
+class RejectionPatternRow(BaseModel):
+    state: str
+    tax_category: str
+    coverage_status: str
+    count: int
+
+
+class RejectionPatternsOut(BaseModel):
+    by_state: list[RejectionPatternRow]
+    by_tax_category: list[RejectionPatternRow]
+    by_coverage: list[RejectionPatternRow]
+    rule_coverage_report: dict[str, float] = Field(
+        default_factory=dict,
+        description="Approximate percentages for prevented / missed / unclear.",
+    )
+
+
+class SubmissionPathOut(BaseModel):
+    recommended_path: str
+    steps: list[str]
+    required_documents: list[str]
+    submission_methods: list[str]
+    ranked_options: list[dict[str, Any]]
+    portal_urls: list[str] = Field(default_factory=list)
+    transaction_type: Optional[str] = None
+
+
+class WorkflowStartBody(BaseModel):
+    state: Optional[str] = None
+    tax_category: Optional[str] = None
+    title: Optional[str] = None
+    org: Optional[str] = None
+    template_id: Optional[str] = None
+    case_id: Optional[str] = None
+    actor: Optional[str] = None
+    validation_payload: Optional[dict[str, Any]] = None
+
+
+class WorkflowAdvanceBody(BaseModel):
+    validation_payload: Optional[dict[str, Any]] = None
+    actor: Optional[str] = None
+
+
+class WorkflowAdvanceOut(BaseModel):
+    blocked: bool
+    case: Optional[dict[str, Any]] = None
+    validation: Optional[dict[str, Any]] = None
+
+
+class WebhookRegisterBody(BaseModel):
+    url: str
+    events: list[str] = Field(
+        default_factory=lambda: [
+            "rule.published",
+            "submission.validated",
+            "outcome.created",
+        ]
+    )
+    tenant_id: str = "default"
+
+
+class WebhookOut(BaseModel):
+    id: str
+    url: str
+    events: list[str]
+    active: bool
+    secret_hint: Optional[str] = None
+
+
+class WebhookRegisterResponse(WebhookOut):
+    """Returned once from POST /register; signing_secret is only returned on creation."""
+
+    signing_secret: Optional[str] = Field(
+        None,
+        description="HMAC signing key; store securely — not shown again.",
+    )
+
+
+class WebhookDeliveryPublic(BaseModel):
+    id: str
+    subscription_id: str
+    event_type: str
+    status: str
+    attempt_count: int
+    last_error: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class WebhookDeliveriesResponse(BaseModel):
+    deliveries: list[WebhookDeliveryPublic]
+
+
+class DemoResetOut(BaseModel):
+    deleted_outcomes: int
+    status: str
+
+
+class KpiSummaryOut(BaseModel):
+    rules_published: int
+    outcome_events: int
+    active_sources: int
 
 
 SourceDetail.model_rebuild()
