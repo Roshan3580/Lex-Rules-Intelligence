@@ -112,6 +112,7 @@ def _ingest_one_url(
         ingestion_runs.record_item(
             db,
             run,
+            tenant_id=tenant_id,
             source=source,
             status=status,
             chunks_created=chunks,
@@ -123,6 +124,7 @@ def _ingest_one_url(
         ingestion_runs.record_item(
             db,
             run,
+            tenant_id=tenant_id,
             name=name or url,
             url=url,
             state=state,
@@ -173,6 +175,7 @@ def ingest_source(
     run = ingestion_runs.start_run(
         db,
         kind=kind,
+        tenant_id=tenant_id,
         triggered_by="api:/api/ingest/source",
         notes=f"source_type={payload.source_type}",
     )
@@ -203,6 +206,7 @@ def ingest_source(
                 ingestion_runs.record_item(
                     db,
                     run,
+                    tenant_id=tenant_id,
                     source=source,
                     status="ingested",
                     chunks_created=chunks,
@@ -213,6 +217,7 @@ def ingest_source(
                 ingestion_runs.record_item(
                     db,
                     run,
+                    tenant_id=tenant_id,
                     name=payload.title or "Manual entry",
                     url=payload.url,
                     state=payload.state,
@@ -233,6 +238,7 @@ def ingest_source(
                     ingestion_runs.record_item(
                         db,
                         run,
+                        tenant_id=tenant_id,
                         name=payload.title or payload.url,
                         url=payload.url,
                         state=payload.state,
@@ -335,9 +341,11 @@ def ingest_run(
 def list_runs(
     limit: int = 50,
     db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     rows = (
         db.query(models.IngestionRun)
+        .filter(models.IngestionRun.tenant_id == tenant_id)
         .order_by(models.IngestionRun.started_at.desc())
         .limit(max(1, min(limit, 200)))
         .all()
@@ -346,15 +354,19 @@ def list_runs(
 
 
 @router.get("/runs/{run_id}", response_model=schemas.IngestionRunDetail)
-def get_run(run_id: str, db: Session = Depends(get_db)):
+def get_run(run_id: str, db: Session = Depends(get_db), tenant_id: str = Depends(tenant_id_dep)):
     run = (
-        db.query(models.IngestionRun).filter(models.IngestionRun.id == run_id).first()
+        db.query(models.IngestionRun)
+        .filter(models.IngestionRun.tenant_id == tenant_id)
+        .filter(models.IngestionRun.id == run_id)
+        .first()
     )
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
     items = (
         db.query(models.IngestionRunItem)
         .filter(models.IngestionRunItem.run_id == run.id)
+        .filter(models.IngestionRunItem.tenant_id == tenant_id)
         .order_by(models.IngestionRunItem.created_at.asc())
         .all()
     )

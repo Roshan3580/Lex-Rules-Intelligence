@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
+from ..middleware.rbac import tenant_id_dep
 from ..services import analytics_service, outcomes_service
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -16,8 +17,9 @@ router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 def get_analytics(
     days: int = 30,
     db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
-    data = analytics_service.build_analytics(db, days=days)
+    data = analytics_service.build_analytics(db, tenant_id=tenant_id, days=days)
     return schemas.AnalyticsOut(
         rules_by_state=data["rules_by_state"],
         rules_by_tax_category=data["rules_by_tax_category"],
@@ -33,8 +35,8 @@ def get_analytics(
 
 
 @router.get("/rejection-coverage", response_model=schemas.RejectionCoverageOut)
-def rejection_coverage(db: Session = Depends(get_db)):
-    data = outcomes_service.rejection_coverage_summary(db)
+def rejection_coverage(db: Session = Depends(get_db), tenant_id: str = Depends(tenant_id_dep)):
+    data = outcomes_service.rejection_coverage_summary(db, tenant_id=tenant_id)
     return schemas.RejectionCoverageOut(
         total_outcomes=data["total_outcomes"],
         by_coverage_status=[
@@ -54,8 +56,8 @@ def rejection_coverage(db: Session = Depends(get_db)):
 
 
 @router.get("/rejection-patterns", response_model=schemas.RejectionPatternsOut)
-def rejection_patterns(db: Session = Depends(get_db)):
-    raw = outcomes_service.rejection_patterns_analysis(db)
+def rejection_patterns(db: Session = Depends(get_db), tenant_id: str = Depends(tenant_id_dep)):
+    raw = outcomes_service.rejection_patterns_analysis(db, tenant_id=tenant_id)
     rows = [schemas.RejectionPatternRow(**r) for r in raw["by_state"]]
     return schemas.RejectionPatternsOut(
         by_state=rows,

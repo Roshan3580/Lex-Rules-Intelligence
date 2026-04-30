@@ -227,13 +227,19 @@ def list_outcomes(
     return q.limit(min(limit, 500)).all()
 
 
-def rejection_coverage_summary(db: Session) -> dict[str, Any]:
-    total = db.query(func.count(models.OutcomeEvent.id)).scalar() or 0
+def rejection_coverage_summary(db: Session, *, tenant_id: str = "default") -> dict[str, Any]:
+    total = (
+        db.query(func.count(models.OutcomeEvent.id))
+        .filter(models.OutcomeEvent.tenant_id == tenant_id)
+        .scalar()
+        or 0
+    )
     rows = (
         db.query(
             models.OutcomeEvent.coverage_status,
             func.count(models.OutcomeEvent.id),
         )
+        .filter(models.OutcomeEvent.tenant_id == tenant_id)
         .group_by(models.OutcomeEvent.coverage_status)
         .all()
     )
@@ -249,6 +255,7 @@ def rejection_coverage_summary(db: Session) -> dict[str, Any]:
             models.OutcomeEvent.rejection_reason,
             func.count(models.OutcomeEvent.id),
         )
+        .filter(models.OutcomeEvent.tenant_id == tenant_id)
         .group_by(models.OutcomeEvent.rejection_reason)
         .order_by(func.count(models.OutcomeEvent.id).desc())
         .limit(10)
@@ -258,6 +265,7 @@ def rejection_coverage_summary(db: Session) -> dict[str, Any]:
 
     missing = (
         db.query(models.OutcomeEvent)
+        .filter(models.OutcomeEvent.tenant_id == tenant_id)
         .filter(models.OutcomeEvent.coverage_status == "missing_rule")
         .all()
     )
@@ -281,7 +289,7 @@ def rejection_coverage_summary(db: Session) -> dict[str, Any]:
     }
 
 
-def rejection_patterns_analysis(db: Session) -> dict[str, Any]:
+def rejection_patterns_analysis(db: Session, *, tenant_id: str = "default") -> dict[str, Any]:
     """Cluster outcomes for analytics (Brief §4.4)."""
     from sqlalchemy import func
 
@@ -292,6 +300,7 @@ def rejection_patterns_analysis(db: Session) -> dict[str, Any]:
             models.OutcomeEvent.coverage_status,
             func.count(models.OutcomeEvent.id),
         )
+        .filter(models.OutcomeEvent.tenant_id == tenant_id)
         .group_by(
             models.OutcomeEvent.state,
             models.OutcomeEvent.tax_category,
@@ -308,9 +317,15 @@ def rejection_patterns_analysis(db: Session) -> dict[str, Any]:
         }
         for r in by_state
     ]
-    tot = db.query(func.count(models.OutcomeEvent.id)).scalar() or 0
+    tot = (
+        db.query(func.count(models.OutcomeEvent.id))
+        .filter(models.OutcomeEvent.tenant_id == tenant_id)
+        .scalar()
+        or 0
+    )
     prev = (
         db.query(func.count(models.OutcomeEvent.id))
+        .filter(models.OutcomeEvent.tenant_id == tenant_id)
         .filter(
             models.OutcomeEvent.coverage_status == "prevented_by_existing_rule"
         )
@@ -319,12 +334,14 @@ def rejection_patterns_analysis(db: Session) -> dict[str, Any]:
     )
     miss = (
         db.query(func.count(models.OutcomeEvent.id))
+        .filter(models.OutcomeEvent.tenant_id == tenant_id)
         .filter(models.OutcomeEvent.coverage_status == "missing_rule")
         .scalar()
         or 0
     )
     uncl = (
         db.query(func.count(models.OutcomeEvent.id))
+        .filter(models.OutcomeEvent.tenant_id == tenant_id)
         .filter(models.OutcomeEvent.coverage_status == "unclear")
         .scalar()
         or 0

@@ -15,9 +15,10 @@ from .. import models, schemas
 from ..services import validation
 
 
-def _last_ingestion_run(db: Session) -> Optional[dict[str, Any]]:
+def _last_ingestion_run(db: Session, *, tenant_id: str = "default") -> Optional[dict[str, Any]]:
     run = (
         db.query(models.IngestionRun)
+        .filter(models.IngestionRun.tenant_id == tenant_id)
         .order_by(models.IngestionRun.started_at.desc())
         .first()
     )
@@ -121,5 +122,5 @@ def admin_summary(db: Session, *, tenant_id: str = "default") -> dict[str, Any]:
         "failed_sources": int(failed_sources),
         "avg_confidence": float(avg_confidence),
         "extraction_breakdown": extraction_breakdown,
-        "last_ingestion_run": _last_ingestion_run(db),
+        "last_ingestion_run": _last_ingestion_run(db, tenant_id=tenant_id),
     }

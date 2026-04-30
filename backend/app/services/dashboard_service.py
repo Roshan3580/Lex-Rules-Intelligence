@@ -27,7 +27,9 @@ def _review_action_label(action: str) -> str:
     }.get(action, action.replace("_", " ").title())
 
 
-def build_activities(db: Session, *, limit: int = 40) -> list[dict[str, Any]]:
+def build_activities(
+    db: Session, *, tenant_id: str = "default", limit: int = 40
+) -> list[dict[str, Any]]:
     """Merge ingestion, review, source-version, and extraction signals."""
     cap = min(max(limit, 1), 80)
     items: list[dict[str, Any]] = []
@@ -35,6 +37,7 @@ def build_activities(db: Session, *, limit: int = 40) -> list[dict[str, Any]]:
     rev_rows = (
         db.query(models.ReviewEvent, models.Rule)
         .join(models.Rule, models.ReviewEvent.rule_id == models.Rule.id)
+        .filter(models.Rule.tenant_id == tenant_id)
         .order_by(models.ReviewEvent.created_at.desc())
         .limit(28)
         .all()
@@ -72,6 +75,7 @@ def build_activities(db: Session, *, limit: int = 40) -> list[dict[str, Any]]:
 
     runs = (
         db.query(models.IngestionRun)
+        .filter(models.IngestionRun.tenant_id == tenant_id)
         .order_by(models.IngestionRun.started_at.desc())
         .limit(12)
         .all()
@@ -98,6 +102,7 @@ def build_activities(db: Session, *, limit: int = 40) -> list[dict[str, Any]]:
 
     run_items = (
         db.query(models.IngestionRunItem)
+        .filter(models.IngestionRunItem.tenant_id == tenant_id)
         .filter(models.IngestionRunItem.rules_created > 0)
         .order_by(models.IngestionRunItem.created_at.desc())
         .limit(18)
@@ -121,6 +126,8 @@ def build_activities(db: Session, *, limit: int = 40) -> list[dict[str, Any]]:
 
     versions = (
         db.query(models.SourceVersion)
+        .join(models.Source, models.Source.id == models.SourceVersion.source_id)
+        .filter(models.Source.tenant_id == tenant_id)
         .filter(models.SourceVersion.captured_reason == "content_changed")
         .order_by(models.SourceVersion.created_at.desc())
         .limit(12)
@@ -155,7 +162,9 @@ def build_activities(db: Session, *, limit: int = 40) -> list[dict[str, Any]]:
     return out
 
 
-def build_alerts(db: Session, *, summary: Optional[dict[str, Any]] = None) -> list[dict[str, Any]]:
+def build_alerts(
+    db: Session, *, tenant_id: str = "default", summary: Optional[dict[str, Any]] = None
+) -> list[dict[str, Any]]:
     """Derive actionable alerts from live rows (not mocked)."""
     alerts: list[dict[str, Any]] = []
     sid = 0
@@ -180,9 +189,10 @@ def build_alerts(db: Session, *, summary: Optional[dict[str, Any]] = None) -> li
             }
         )
 
-    sumry = summary or admin_service.admin_summary(db)
+    sumry = summary or admin_service.admin_summary(db, tenant_id=tenant_id)
     failed = (
         db.query(models.Source)
+        .filter(models.Source.tenant_id == tenant_id)
         .filter(models.Source.status == "failed")
         .order_by(models.Source.updated_at.desc())
         .limit(8)
@@ -207,6 +217,7 @@ def build_alerts(db: Session, *, summary: Optional[dict[str, Any]] = None) -> li
 
     low_conf = (
         db.query(models.Rule)
+        .filter(models.Rule.tenant_id == tenant_id)
         .filter(models.Rule.confidence_score < validation.THRESHOLD_NEEDS_REVIEW)
         .filter(
             models.Rule.review_status.in_(
@@ -225,6 +236,7 @@ def build_alerts(db: Session, *, summary: Optional[dict[str, Any]] = None) -> li
     conflict_lineage = 0
     for rule in (
         db.query(models.Rule)
+        .filter(models.Rule.tenant_id == tenant_id)
         .filter(models.Rule.lineage.isnot(None))
         .limit(500)
         .all()
@@ -243,6 +255,7 @@ def build_alerts(db: Session, *, summary: Optional[dict[str, Any]] = None) -> li
     dup_pairs = 0
     recent = (
         db.query(models.Rule)
+        .filter(models.Rule.tenant_id == tenant_id)
         .order_by(models.Rule.created_at.desc())
         .limit(120)
         .all()
@@ -251,6 +264,7 @@ def build_alerts(db: Session, *, summary: Optional[dict[str, Any]] = None) -> li
     for rule in recent:
         dup = validation.find_duplicate_rule(
             db,
+            tenant_id=tenant_id,
             state=rule.state,
             tax_category=rule.tax_category,
             rule_title=rule.rule_title,
@@ -270,6 +284,8 @@ def build_alerts(db: Session, *, summary: Optional[dict[str, Any]] = None) -> li
 
     changed_recent = (
         db.query(models.SourceVersion)
+        .join(models.Source, models.Source.id == models.SourceVersion.source_id)
+        .filter(models.Source.tenant_id == tenant_id)
         .filter(models.SourceVersion.captured_reason == "content_changed")
         .order_by(models.SourceVersion.created_at.desc())
         .limit(1)

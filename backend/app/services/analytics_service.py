@@ -38,7 +38,9 @@ def _normalize_extraction(method: str | None) -> str:
     return "other"
 
 
-def build_analytics(db: Session, *, days: int = 30) -> dict[str, Any]:
+def build_analytics(
+    db: Session, *, tenant_id: str = "default", days: int = 30
+) -> dict[str, Any]:
     """Return chart-ready bundles; safe on empty DB."""
     window = max(7, min(days, 90))
     cutoff = datetime.utcnow() - timedelta(days=window)
@@ -46,6 +48,7 @@ def build_analytics(db: Session, *, days: int = 30) -> dict[str, Any]:
     # --- Rules by state ---
     st_rows = (
         db.query(models.Rule.state, func.count(models.Rule.id))
+        .filter(models.Rule.tenant_id == tenant_id)
         .group_by(models.Rule.state)
         .order_by(func.count(models.Rule.id).desc())
         .all()
@@ -57,6 +60,7 @@ def build_analytics(db: Session, *, days: int = 30) -> dict[str, Any]:
     # --- Rules by tax category ---
     cat_rows = (
         db.query(models.Rule.tax_category, func.count(models.Rule.id))
+        .filter(models.Rule.tenant_id == tenant_id)
         .group_by(models.Rule.tax_category)
         .order_by(func.count(models.Rule.id).desc())
         .all()
@@ -67,7 +71,11 @@ def build_analytics(db: Session, *, days: int = 30) -> dict[str, Any]:
 
     # --- Confidence histogram (current rules) ---
     conf_counts = [0, 0, 0, 0, 0]
-    for (score,) in db.query(models.Rule.confidence_score).all():
+    for (score,) in (
+        db.query(models.Rule.confidence_score)
+        .filter(models.Rule.tenant_id == tenant_id)
+        .all()
+    ):
         try:
             x = float(score)
         except (TypeError, ValueError):
@@ -81,6 +89,7 @@ def build_analytics(db: Session, *, days: int = 30) -> dict[str, Any]:
     # --- Sources by ingestion status ---
     status_rows = (
         db.query(models.Source.status, func.count(models.Source.id))
+        .filter(models.Source.tenant_id == tenant_id)
         .group_by(models.Source.status)
         .all()
     )
@@ -89,6 +98,7 @@ def build_analytics(db: Session, *, days: int = 30) -> dict[str, Any]:
     # --- Extraction method (normalized) ---
     ext_raw = (
         db.query(models.Rule.extraction_method, func.count(models.Rule.id))
+        .filter(models.Rule.tenant_id == tenant_id)
         .group_by(models.Rule.extraction_method)
         .all()
     )
@@ -104,6 +114,7 @@ def build_analytics(db: Session, *, days: int = 30) -> dict[str, Any]:
     day_created = func.date(models.Rule.created_at)
     rules_day_rows = (
         db.query(day_created, func.count(models.Rule.id))
+        .filter(models.Rule.tenant_id == tenant_id)
         .filter(models.Rule.created_at >= cutoff)
         .group_by(day_created)
         .all()
@@ -125,6 +136,8 @@ def build_analytics(db: Session, *, days: int = 30) -> dict[str, Any]:
     day_rev = func.date(models.ReviewEvent.created_at)
     rev_day_rows = (
         db.query(day_rev, func.count(models.ReviewEvent.id))
+        .join(models.Rule, models.Rule.id == models.ReviewEvent.rule_id)
+        .filter(models.Rule.tenant_id == tenant_id)
         .filter(models.ReviewEvent.created_at >= cutoff)
         .group_by(day_rev)
         .all()
@@ -144,7 +157,7 @@ def build_analytics(db: Session, *, days: int = 30) -> dict[str, Any]:
     # --- Source freshness (bucket counts) ---
     now = datetime.utcnow()
     fresh_buckets = {k: 0 for k, _ in _FRESHNESS_BUCKETS}
-    for src in db.query(models.Source).all():
+    for src in db.query(models.Source).filter(models.Source.tenant_id == tenant_id).all():
         lc = src.last_checked
         if lc is None:
             fresh_buckets["never_checked"] += 1
@@ -171,6 +184,8 @@ def build_analytics(db: Session, *, days: int = 30) -> dict[str, Any]:
     # --- Source content changes in window (for KPI) ---
     sv_changes = (
         db.query(func.count(models.SourceVersion.id))
+        .join(models.Source, models.Source.id == models.SourceVersion.source_id)
+        .filter(models.Source.tenant_id == tenant_id)
         .filter(models.SourceVersion.captured_reason == "content_changed")
         .filter(models.SourceVersion.created_at >= cutoff)
         .scalar()
@@ -178,16 +193,28 @@ def build_analytics(db: Session, *, days: int = 30) -> dict[str, Any]:
     )
 
     # --- Totals ---
-    total_rules = db.query(func.count(models.Rule.id)).scalar() or 0
-    total_sources = db.query(func.count(models.Source.id)).scalar() or 0
+    total_rules = (
+        db.query(func.count(models.Rule.id))
+        .filter(models.Rule.tenant_id == tenant_id)
+        .scalar()
+        or 0
+    )
+    total_sources = (
+        db.query(func.count(models.Source.id))
+        .filter(models.Source.tenant_id == tenant_id)
+        .scalar()
+        or 0
+    )
     published = (
         db.query(func.count(models.Rule.id))
+        .filter(models.Rule.tenant_id == tenant_id)
         .filter(models.Rule.review_status == "published")
         .scalar()
         or 0
     )
     in_review = (
         db.query(func.count(models.Rule.id))
+        .filter(models.Rule.tenant_id == tenant_id)
         .filter(
             models.Rule.review_status.in_(
                 ["draft", "needs_review", "auto_validated"]
@@ -198,6 +225,8 @@ def build_analytics(db: Session, *, days: int = 30) -> dict[str, Any]:
     )
     review_events_in_window = (
         db.query(func.count(models.ReviewEvent.id))
+        .join(models.Rule, models.Rule.id == models.ReviewEvent.rule_id)
+        .filter(models.Rule.tenant_id == tenant_id)
         .filter(models.ReviewEvent.created_at >= cutoff)
         .scalar()
         or 0

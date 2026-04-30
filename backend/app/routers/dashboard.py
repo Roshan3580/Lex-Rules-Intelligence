@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from .. import schemas
 from ..config import settings
 from ..database import get_db
+from ..middleware.rbac import tenant_id_dep
 from ..services import admin_service, dashboard_service
 from ..services.embeddings import embedder
 from ..services.retrieval_service import last_mode as retrieval_last_mode
@@ -20,8 +21,9 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 def get_dashboard(
     activity_limit: int = 40,
     db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
-    summary = admin_service.admin_summary(db)
+    summary = admin_service.admin_summary(db, tenant_id=tenant_id)
     vstats = vector_store.stats()
     kpis = schemas.DashboardKPIsOut(
         total_sources=summary["total_sources"],
@@ -36,8 +38,12 @@ def get_dashboard(
         embedding_provider=embedder.name,
         vector_index_size=int(vstats.get("size") or 0),
     )
-    activities_raw = dashboard_service.build_activities(db, limit=activity_limit)
-    alerts_raw = dashboard_service.build_alerts(db, summary=summary)
+    activities_raw = dashboard_service.build_activities(
+        db, tenant_id=tenant_id, limit=activity_limit
+    )
+    alerts_raw = dashboard_service.build_alerts(
+        db, tenant_id=tenant_id, summary=summary
+    )
     activities = [schemas.DashboardActivityOut(**a) for a in activities_raw]
     alerts = [schemas.DashboardAlertOut(**a) for a in alerts_raw]
     return schemas.DashboardOut(kpis=kpis, activities=activities, alerts=alerts)

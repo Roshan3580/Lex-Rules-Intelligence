@@ -997,6 +997,7 @@ class CacheNamespaceStatsOut(BaseModel):
 
 
 class CacheMetricsOut(BaseModel):
+    global_process_cache_stats: bool = True
     namespaces: dict[str, CacheNamespaceStatsOut]
 
 

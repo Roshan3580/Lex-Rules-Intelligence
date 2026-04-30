@@ -92,6 +92,7 @@ def run_seed_ingestion(
     run = ingestion_runs.start_run(
         db,
         kind="yaml",
+        tenant_id=tenant_id,
         only_state=only_state,
         only_tax_type=only_tax_type,
         triggered_by=triggered_by,
@@ -117,6 +118,7 @@ def run_seed_ingestion(
             ingestion_runs.record_item(
                 db,
                 run,
+                tenant_id=tenant_id,
                 name=name,
                 url=None,
                 state=state,
@@ -157,6 +159,7 @@ def run_seed_ingestion(
             ingestion_runs.record_item(
                 db,
                 run,
+                tenant_id=tenant_id,
                 source=source,
                 status=status,
                 chunks_created=chunks,
@@ -181,6 +184,7 @@ def run_seed_ingestion(
             ingestion_runs.record_item(
                 db,
                 run,
+                tenant_id=tenant_id,
                 name=name,
                 url=url,
                 state=state,

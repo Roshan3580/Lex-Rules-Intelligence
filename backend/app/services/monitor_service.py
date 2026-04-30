@@ -13,6 +13,7 @@ from . import ingestion_runs, ingestion_service
 def run_monitor(
     db: Session,
     *,
+    tenant_id: str = "default",
     source_ids: Optional[list[str]] = None,
     limit: int = 50,
     auto_extract: bool = True,
@@ -27,11 +28,12 @@ def run_monitor(
     run = ingestion_runs.start_run(
         db,
         kind="monitor",
+        tenant_id=tenant_id,
         triggered_by="api:/api/monitor/run",
         notes=f"limit={cap} auto_extract={auto_extract}",
     )
 
-    q = db.query(models.Source)
+    q = db.query(models.Source).filter(models.Source.tenant_id == tenant_id)
     if source_ids:
         q = q.filter(models.Source.id.in_(source_ids))
     # When no filter: every source is visited — URL-backed rows are
@@ -53,6 +55,7 @@ def run_monitor(
             ingestion_runs.record_item(
                 db,
                 run,
+                tenant_id=tenant_id,
                 source=fresh,
                 status="unchanged",
                 chunks_created=0,
@@ -62,6 +65,7 @@ def run_monitor(
             ingestion_runs.record_item(
                 db,
                 run,
+                tenant_id=tenant_id,
                 source=fresh,
                 status="updated",
                 chunks_created=int(res.get("chunks") or 0),
@@ -72,6 +76,7 @@ def run_monitor(
             ingestion_runs.record_item(
                 db,
                 run,
+                tenant_id=tenant_id,
                 source=fresh,
                 status="skipped",
                 chunks_created=0,
@@ -81,6 +86,7 @@ def run_monitor(
             ingestion_runs.record_item(
                 db,
                 run,
+                tenant_id=tenant_id,
                 source=fresh,
                 status="failed",
                 chunks_created=0,

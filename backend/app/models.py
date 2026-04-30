@@ -355,6 +355,7 @@ class IngestionRun(Base):
     __tablename__ = "ingestion_runs"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     kind: Mapped[str] = mapped_column(String(32))  # single | yaml | upload | text | crawl | monitor
     status: Mapped[str] = mapped_column(String(32), default="running")  # running | completed | failed
     triggered_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
@@ -382,6 +383,7 @@ class IngestionRunItem(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
     run_id: Mapped[str] = mapped_column(ForeignKey("ingestion_runs.id", ondelete="CASCADE"))
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     source_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("sources.id", ondelete="SET NULL"), nullable=True
     )

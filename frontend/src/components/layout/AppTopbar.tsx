@@ -1,8 +1,18 @@
 import { Bell, Search, Command } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RbacRoleSwitcher } from "@/components/RbacRoleSwitcher";
+import { getTenantId } from "@/lib/api";
+import { useEffect, useState } from "react";
 
 export function AppTopbar() {
+  const [tenant, setTenant] = useState<string>(() => getTenantId());
+
+  useEffect(() => {
+    const sync = () => setTenant(getTenantId());
+    window.addEventListener("rules_intel_tenant_id", sync);
+    return () => window.removeEventListener("rules_intel_tenant_id", sync);
+  }, []);
+
   return (
     <header className="h-16 shrink-0 border-b border-border bg-background/60 backdrop-blur-xl sticky top-0 z-30">
       <div className="h-full px-4 lg:px-6 flex items-center gap-4">
@@ -19,6 +29,10 @@ export function AppTopbar() {
 
         <div className="flex items-center gap-2 ml-auto">
           <RbacRoleSwitcher />
+          <div className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-md bg-secondary/60 border border-border/60">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Tenant</span>
+            <span className="text-[11px] font-mono text-foreground">{tenant}</span>
+          </div>
           <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-success/10 border border-success/20">
             <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
             <span className="text-[11px] font-medium text-success">All systems operational</span>

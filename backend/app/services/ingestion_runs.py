@@ -20,12 +20,14 @@ def start_run(
     db: Session,
     *,
     kind: str,
+    tenant_id: str = "default",
     only_state: Optional[str] = None,
     only_tax_type: Optional[str] = None,
     triggered_by: Optional[str] = None,
     notes: Optional[str] = None,
 ) -> models.IngestionRun:
     run = models.IngestionRun(
+        tenant_id=tenant_id,
         kind=kind,
         status="running",
         only_state=only_state,
@@ -46,6 +48,7 @@ def record_item(
     db: Session,
     run: models.IngestionRun,
     *,
+    tenant_id: Optional[str] = None,
     source: Optional[models.Source] = None,
     name: Optional[str] = None,
     url: Optional[str] = None,
@@ -58,8 +61,10 @@ def record_item(
     extraction_method: Optional[str] = None,
     error_message: Optional[str] = None,
 ) -> models.IngestionRunItem:
+    resolved_tenant = tenant_id or getattr(run, "tenant_id", None) or "default"
     item = models.IngestionRunItem(
         run_id=run.id,
+        tenant_id=resolved_tenant,
         source_id=source.id if source is not None else None,
         name=name or (source.name if source is not None else None),
         url=url or (source.url if source is not None else None),

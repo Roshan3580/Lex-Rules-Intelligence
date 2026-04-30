@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..middleware.rbac import require_role
+from ..middleware.rbac import require_role, tenant_id_dep
 from ..services import impact_service, monitor_service
 from ..services.cache_service import invalidate_enforcement_caches
 from .ingest import _item_from_db
@@ -21,6 +21,7 @@ def monitor_run(
     payload: schemas.MonitorRunRequest | None = None,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("reviewer")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     """Walk monitored sources (all, or ``source_ids``), re-fetch URLs, compare
     checksums, and re-chunk + re-extract when content changes. Sources without a
@@ -30,6 +31,7 @@ def monitor_run(
     payload = payload or schemas.MonitorRunRequest()
     run = monitor_service.run_monitor(
         db,
+        tenant_id=tenant_id,
         source_ids=payload.source_ids,
         limit=payload.limit,
         auto_extract=payload.auto_extract,
@@ -37,6 +39,7 @@ def monitor_run(
     items_db = (
         db.query(models.IngestionRunItem)
         .filter(models.IngestionRunItem.run_id == run.id)
+        .filter(models.IngestionRunItem.tenant_id == tenant_id)
         .order_by(models.IngestionRunItem.created_at.asc())
         .all()
     )
@@ -71,5 +74,14 @@ def monitor_impact(
     source_id: str = Query(...),
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("reviewer")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
+    src = (
+        db.query(models.Source)
+        .filter(models.Source.tenant_id == tenant_id)
+        .filter(models.Source.id == source_id)
+        .first()
+    )
+    if src is None:
+        raise HTTPException(status_code=404, detail="Source not found")
     return impact_service.analyze_source_impact(db, source_id=source_id)

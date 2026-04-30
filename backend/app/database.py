@@ -46,8 +46,61 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_rules_phase2_columns()
     _ensure_governance_v1_columns()
+    _ensure_ingestion_run_tenant_columns()
     _ensure_webhook_signing_secret_column()
     _ensure_webhook_attempt_telemetry_columns()
+
+
+def _ensure_ingestion_run_tenant_columns() -> None:
+    """Add tenant_id columns for ingestion history tables and backfill defaults."""
+    from sqlalchemy import inspect, text
+
+    dialect = engine.dialect.name
+
+    def ensure_table_cols(table: str) -> bool:
+        try:
+            insp = inspect(engine)
+            if table not in insp.get_table_names():
+                return False
+            have = {c["name"] for c in insp.get_columns(table)}
+        except Exception:  # pragma: no cover
+            return False
+        if "tenant_id" in have:
+            return True
+        stmt = (
+            f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) DEFAULT \'default\''
+            if dialect == "postgresql"
+            else f"ALTER TABLE {table} ADD COLUMN tenant_id VARCHAR(64) DEFAULT 'default'"
+        )
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(stmt))
+        except Exception:  # pragma: no cover
+            return False
+        return True
+
+    changed = False
+    changed = ensure_table_cols("ingestion_runs") or changed
+    changed = ensure_table_cols("ingestion_run_items") or changed
+    if not changed:
+        # Columns already exist (or tables missing) — still attempt backfill.
+        pass
+
+    # Backfill nulls for existing rows (SQLite won't populate defaults retroactively).
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE ingestion_runs SET tenant_id='default' WHERE tenant_id IS NULL"
+                )
+            )
+            conn.execute(
+                text(
+                    "UPDATE ingestion_run_items SET tenant_id='default' WHERE tenant_id IS NULL"
+                )
+            )
+    except Exception:  # pragma: no cover
+        pass
 
 
 def _ensure_governance_v1_columns() -> None:

@@ -20,12 +20,21 @@ router = APIRouter(prefix="/api/platform", tags=["platform"])
 
 
 @router.get("/kpis", response_model=schemas.KpiSummaryOut)
-def kpis(db: Session = Depends(get_db)):
+def kpis(db: Session = Depends(get_db), tenant_id: str = Depends(tenant_id_dep)):
     pub = db.query(func.count(models.Rule.id)).filter(
+        models.Rule.tenant_id == tenant_id
+    ).filter(
         models.Rule.review_status == "published"
     ).scalar() or 0
-    ev = db.query(func.count(models.OutcomeEvent.id)).scalar() or 0
+    ev = (
+        db.query(func.count(models.OutcomeEvent.id))
+        .filter(models.OutcomeEvent.tenant_id == tenant_id)
+        .scalar()
+        or 0
+    )
     src = db.query(func.count(models.Source.id)).filter(
+        models.Source.tenant_id == tenant_id
+    ).filter(
         models.Source.status == "processed"
     ).scalar() or 0
     return schemas.KpiSummaryOut(
@@ -39,6 +48,7 @@ def kpis(db: Session = Depends(get_db)):
 def cache_metrics(_: str = Depends(require_role("reviewer"))):
     raw = default_cache().stats()
     return schemas.CacheMetricsOut(
+        global_process_cache_stats=True,
         namespaces={
             ns: schemas.CacheNamespaceStatsOut(**stats) for ns, stats in raw.items()
         }

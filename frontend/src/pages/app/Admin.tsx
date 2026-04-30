@@ -343,10 +343,10 @@ const Admin = () => {
       </div>
 
       <div className="rounded-xl border border-border/80 bg-secondary/25 px-4 py-3 text-xs text-muted-foreground max-w-3xl">
+        <span className="font-medium text-foreground">Metrics shown for active tenant:</span>{" "}
+        <code className="text-[10px] bg-secondary px-1 rounded">{tenant}</code>.{" "}
         <span className="font-medium text-foreground">Tenant isolation is header-based demo isolation.</span>{" "}
-        Current tenant:{" "}
-        <code className="text-[10px] bg-secondary px-1 rounded">{tenant}</code>. API calls send{" "}
-        <code className="text-[10px] bg-secondary px-1 rounded">X-Tenant-Id</code>, and lists/KPIs are scoped to it.
+        API calls send <code className="text-[10px] bg-secondary px-1 rounded">X-Tenant-Id</code>, and lists/KPIs are scoped to it.
       </div>
 
       <Link
@@ -427,6 +427,9 @@ const Admin = () => {
                 <h2 className="text-base font-semibold">Enforcement cache</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   In-process TTL caches for rule applicability lookups and validate-submission responses (cleared on coarse rule or source changes).
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Cache stats are process-level; cache keys include tenant but counters are global.
                 </p>
               </div>
             </div>
