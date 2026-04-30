@@ -672,6 +672,8 @@ export const api = {
       `/api/webhooks/subscriptions?active_only=${activeOnly}`,
     ),
 
+  webhookHealth: () => request<WebhookHealthOut>("/api/webhooks/health"),
+
   webhookDeliveries: (params?: {
     status?: string;
     event_type?: string;
@@ -686,6 +688,12 @@ export const api = {
       `/api/webhooks/deliveries${qs ? `?${qs}` : ""}`,
     );
   },
+
+  webhookResendDelivery: (deliveryId: string) =>
+    request<WebhookDeliveryRow>(
+      `/api/webhooks/deliveries/${encodeURIComponent(deliveryId)}/resend`,
+      { method: "POST" },
+    ),
 
   demoReset: () =>
     request<{ deleted_outcomes: number; status: string }>("/api/demo/reset", {
@@ -1089,12 +1097,33 @@ export interface WebhookDeliveryRow {
   status: string;
   attempt_count: number;
   last_error?: string | null;
+  response_status_code?: number | null;
+  response_body_preview?: string | null;
+  duration_ms?: number | null;
   created_at: string;
   updated_at?: string | null;
 }
 
 export interface WebhookDeliveriesList {
   deliveries: WebhookDeliveryRow[];
+}
+
+export interface WebhookFailurePublic {
+  id: string;
+  url: string;
+  event_type: string;
+  last_error?: string | null;
+  created_at: string;
+}
+
+export interface WebhookHealthOut {
+  total_subscriptions: number;
+  active_subscriptions: number;
+  deliveries_last_24h: number;
+  success_last_24h: number;
+  failed_last_24h: number;
+  success_rate_last_24h: number;
+  recent_failures: WebhookFailurePublic[];
 }
 
 export const TAX_TYPES: { value: TaxType; label: string }[] = [

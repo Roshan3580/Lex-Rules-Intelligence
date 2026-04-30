@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   BadgeCheck,
+  CircleSlash,
   Loader2,
   Radio,
   RefreshCw,
+  RotateCcw,
+  ShieldAlert,
   Webhook as WebhookIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,24 +20,28 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { api, type WebhookDeliveryRow, type WebhookSubscriptionRow } from "@/lib/api";
+import { api, getAppRole, type WebhookDeliveryRow, type WebhookHealthOut, type WebhookSubscriptionRow } from "@/lib/api";
 
 export default function WebhooksPage() {
   const [subs, setSubs] = useState<WebhookSubscriptionRow[]>([]);
   const [deliveries, setDeliveries] = useState<WebhookDeliveryRow[]>([]);
+  const [health, setHealth] = useState<WebhookHealthOut | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [role, setRole] = useState(() => getAppRole());
 
   const refresh = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
-      const [s, d] = await Promise.all([
+      const [s, d, h] = await Promise.all([
         api.webhookSubscriptions(false),
         api.webhookDeliveries({ limit: 100 }),
+        api.webhookHealth(),
       ]);
       setSubs(s);
       setDeliveries(d.deliveries ?? []);
+      setHealth(h);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -46,6 +53,12 @@ export default function WebhooksPage() {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    const sync = () => setRole(getAppRole());
+    window.addEventListener("rules_intel_app_role", sync);
+    return () => window.removeEventListener("rules_intel_app_role", sync);
+  }, []);
+
   function statusBadge(status: string, attempt: number) {
     if (status === "success")
       return (
@@ -56,6 +69,22 @@ export default function WebhooksPage() {
     if (status === "pending" && attempt > 1)
       return <Badge variant="secondary">retrying ({attempt})</Badge>;
     return <Badge variant="outline">{status}</Badge>;
+  }
+
+  const canResend = role === "admin";
+
+  async function onResend(deliveryId: string) {
+    if (!canResend) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.webhookResendDelivery(deliveryId);
+      await refresh();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -79,6 +108,53 @@ export default function WebhooksPage() {
       {error && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
+        </div>
+      )}
+
+      {health && (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+                <Radio className="h-4 w-4" /> Active subscriptions
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-semibold">
+                {health.active_subscriptions} / {health.total_subscriptions}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+                <WebhookIcon className="h-4 w-4" /> Deliveries (24h)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-semibold">{health.deliveries_last_24h}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+                <BadgeCheck className="h-4 w-4" /> Success rate (24h)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-semibold">{Math.round(health.success_rate_last_24h * 100)}%</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4" /> Failed (24h)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-semibold">{health.failed_last_24h}</p>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -146,14 +222,16 @@ export default function WebhooksPage() {
                 <TableHead>Event</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Attempts</TableHead>
+                <TableHead>HTTP</TableHead>
                 <TableHead>Error</TableHead>
+                <TableHead>Resend</TableHead>
                 <TableHead>Time</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {deliveries.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-muted-foreground text-sm">
+                  <TableCell colSpan={7} className="text-muted-foreground text-sm">
                     No deliveries recorded.
                   </TableCell>
                 </TableRow>
@@ -163,8 +241,28 @@ export default function WebhooksPage() {
                     <TableCell className="font-mono text-xs">{d.event_type}</TableCell>
                     <TableCell>{statusBadge(d.status, d.attempt_count)}</TableCell>
                     <TableCell>{d.attempt_count}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {d.response_status_code ?? "—"}
+                      {d.duration_ms != null ? ` · ${d.duration_ms}ms` : ""}
+                    </TableCell>
                     <TableCell className="max-w-[200px] truncate text-xs text-destructive">
                       {d.last_error ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      {d.status === "failed" ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={canResend ? "outline" : "secondary"}
+                          disabled={!canResend || busy}
+                          onClick={() => void onResend(d.id)}
+                        >
+                          {canResend ? <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> : <CircleSlash className="h-3.5 w-3.5 mr-1.5" />}
+                          Resend
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                       {new Date(d.created_at).toLocaleString()}

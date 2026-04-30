@@ -954,12 +954,33 @@ class WebhookDeliveryPublic(BaseModel):
     status: str
     attempt_count: int
     last_error: Optional[str] = None
+    response_status_code: Optional[int] = None
+    response_body_preview: Optional[str] = None
+    duration_ms: Optional[int] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
 
 class WebhookDeliveriesResponse(BaseModel):
     deliveries: list[WebhookDeliveryPublic]
+
+
+class WebhookFailurePublic(BaseModel):
+    id: str
+    url: str
+    event_type: str
+    last_error: Optional[str] = None
+    created_at: datetime
+
+
+class WebhookHealthOut(BaseModel):
+    total_subscriptions: int
+    active_subscriptions: int
+    deliveries_last_24h: int
+    success_last_24h: int
+    failed_last_24h: int
+    success_rate_last_24h: float
+    recent_failures: list[WebhookFailurePublic]
 
 
 class DemoResetOut(BaseModel):

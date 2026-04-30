@@ -658,6 +658,9 @@ class WebhookDeliveryAttempt(Base):
     )  # pending | success | failed
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    response_status_code: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    response_body_preview: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=_now, onupdate=_now

@@ -47,6 +47,7 @@ def init_db() -> None:
     _ensure_rules_phase2_columns()
     _ensure_governance_v1_columns()
     _ensure_webhook_signing_secret_column()
+    _ensure_webhook_attempt_telemetry_columns()
 
 
 def _ensure_governance_v1_columns() -> None:
@@ -160,6 +161,46 @@ def _ensure_webhook_signing_secret_column() -> None:
     try:
         with engine.begin() as conn:
             conn.execute(text(stmt))
+    except Exception:  # pragma: no cover
+        pass
+
+
+def _ensure_webhook_attempt_telemetry_columns() -> None:
+    """Add response telemetry columns on existing delivery attempts."""
+    from sqlalchemy import inspect, text
+
+    try:
+        insp = inspect(engine)
+        if "webhook_delivery_attempts" not in insp.get_table_names():
+            return
+        have = {c["name"] for c in insp.get_columns("webhook_delivery_attempts")}
+    except Exception:  # pragma: no cover
+        return
+
+    cols: list[tuple[str, str]] = [
+        ("response_status_code", "INTEGER"),
+        ("response_body_preview", "TEXT"),
+        ("duration_ms", "INTEGER"),
+    ]
+    dialect = engine.dialect.name
+    ddl: list[str] = []
+    for name, sqltype in cols:
+        if name in have:
+            continue
+        if dialect == "postgresql":
+            ddl.append(
+                f'ALTER TABLE "webhook_delivery_attempts" ADD COLUMN IF NOT EXISTS {name} {sqltype}'
+            )
+        else:
+            ddl.append(
+                f"ALTER TABLE webhook_delivery_attempts ADD COLUMN {name} {sqltype}"
+            )
+    if not ddl:
+        return
+    try:
+        with engine.begin() as conn:
+            for stmt in ddl:
+                conn.execute(text(stmt))
     except Exception:  # pragma: no cover
         pass
 

@@ -114,8 +114,12 @@ def dispatch_to_subscriber(
             headers["X-Signature"] = f"sha256={sig}"
 
         try:
+            started = time.monotonic()
             with httpx.Client(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
                 r = client.post(sub.url, content=body_bytes, headers=headers)
+            attempt.duration_ms = int((time.monotonic() - started) * 1000)
+            attempt.response_status_code = int(r.status_code)
+            attempt.response_body_preview = (r.text or "")[:500] or None
             if 200 <= r.status_code < 300:
                 attempt.status = "success"
                 attempt.last_error = None
@@ -129,9 +133,12 @@ def dispatch_to_subscriber(
                     r.status_code,
                 )
                 return
-            err_msg = f"HTTP {r.status_code}: {r.text[:500]}"
+            err_msg = f"HTTP {r.status_code}: {(r.text or '')[:500]}"
         except Exception as exc:
             err_msg = f"{type(exc).__name__}: {exc}"[:2000]
+            attempt.response_status_code = None
+            attempt.response_body_preview = None
+            attempt.duration_ms = None
 
         attempt.last_error = err_msg
         attempt.status = "pending"
@@ -158,3 +165,44 @@ def dispatch_to_subscriber(
         sub.id,
         (attempt.last_error or "")[:300],
     )
+
+
+def resend_delivery_attempt(
+    db: Session, *, delivery_id: str
+) -> models.WebhookDeliveryAttempt:
+    """Create a new attempt row based on an existing delivery id and dispatch immediately."""
+    existing = (
+        db.query(models.WebhookDeliveryAttempt)
+        .filter(models.WebhookDeliveryAttempt.id == delivery_id)
+        .first()
+    )
+    if existing is None:
+        raise LookupError("delivery not found")
+
+    sub = (
+        db.query(models.WebhookSubscription)
+        .filter(models.WebhookSubscription.id == existing.subscription_id)
+        .first()
+    )
+    if sub is None:
+        raise ValueError("subscription missing")
+    if not sub.active:
+        raise ValueError("subscription inactive")
+
+    attempt = models.WebhookDeliveryAttempt(
+        subscription_id=sub.id,
+        event_type=existing.event_type,
+        payload=existing.payload,
+        status="pending",
+        attempt_count=0,
+        last_error=None,
+        response_status_code=None,
+        response_body_preview=None,
+        duration_ms=None,
+    )
+    db.add(attempt)
+    db.commit()
+    db.refresh(attempt)
+    dispatch_to_subscriber(db, attempt, sub)
+    db.refresh(attempt)
+    return attempt
