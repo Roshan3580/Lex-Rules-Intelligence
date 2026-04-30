@@ -24,6 +24,7 @@ def resolve_case(db: Session, case_id_or_pk: str) -> Optional[models.CaseWorkflo
 def run_start(
     db: Session,
     *,
+    tenant_id: str = "default",
     state: Optional[str],
     tax_category: Optional[str],
     title: Optional[str] = None,
@@ -36,6 +37,7 @@ def run_start(
     """Create a case and attach an initial validation payload for advance checks."""
     data = workflows_service.create_case(
         db,
+        tenant_id=tenant_id,
         state=state,
         tax_category=tax_category,
         title=title,
@@ -61,6 +63,7 @@ def advance(
     db: Session,
     case_id_or_pk: str,
     *,
+    tenant_id: str = "default",
     validation_payload: Optional[dict[str, Any]] = None,
     actor: Optional[str] = None,
 ) -> dict[str, Any]:
@@ -74,7 +77,7 @@ def advance(
     stage = case.current_stage or "intake"
     val = rule_engine.validate_submission(
         db,
-        tenant_id="default",
+        tenant_id=tenant_id,
         state=st,
         tax_category=case.tax_category or "general_tax",
         workflow_stage=stage,

@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Confidence } from "@/components/Confidence";
-import { api, confidenceToPct, Rule, RuleVersion, taxTypeLabel } from "@/lib/api";
+import { api, ApiError, confidenceToPct, getAppRole, PublishReadinessOut, Rule, RuleVersion, taxTypeLabel } from "@/lib/api";
 
 const ReviewQueue = () => {
   const [queue, setQueue] = useState<Rule[]>([]);
@@ -21,6 +21,8 @@ const ReviewQueue = () => {
   const [busy, setBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [versions, setVersions] = useState<RuleVersion[]>([]);
+  const [readiness, setReadiness] = useState<PublishReadinessOut | null>(null);
+  const [role, setRole] = useState(() => getAppRole());
 
   async function load() {
     setLoading(true);
@@ -44,11 +46,18 @@ const ReviewQueue = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const sync = () => setRole(getAppRole());
+    window.addEventListener("rules_intel_app_role", sync);
+    return () => window.removeEventListener("rules_intel_app_role", sync);
+  }, []);
+
   const item = queue.find((r) => r.id === selectedId) || queue[0];
 
   useEffect(() => {
     if (!item) {
       setVersions([]);
+      setReadiness(null);
       return;
     }
     let cancelled = false;
@@ -65,6 +74,21 @@ const ReviewQueue = () => {
     };
   }, [item?.id]);
 
+  async function checkReadiness() {
+    if (!item) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.publishReadiness(item.id);
+      setReadiness(r);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+      setReadiness(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function act(action: "approve" | "reject" | "publish" | "needs_review") {
     if (!item) return;
     setBusy(true);
@@ -75,7 +99,18 @@ const ReviewQueue = () => {
       setTimeout(() => setActionMessage(null), 2500);
       await load();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (e instanceof ApiError && e.detail && typeof e.detail === "object") {
+        const d = e.detail as any;
+        if (d?.error === "publish_blocked" && Array.isArray(d?.blockers)) {
+          const msgs = d.blockers.map((b: any) => b?.message ?? JSON.stringify(b)).slice(0, 6);
+          setError(`Publish blocked: ${msgs.join(" · ")}`);
+          await checkReadiness();
+        } else {
+          setError(e.message);
+        }
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       setBusy(false);
     }
@@ -222,6 +257,14 @@ const ReviewQueue = () => {
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={busy || role === "viewer"}
+                  onClick={() => void checkReadiness()}
+                >
+                  Check readiness
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   disabled={busy}
                   onClick={() => act("needs_review")}
                 >
@@ -244,6 +287,30 @@ const ReviewQueue = () => {
                   first, then Publish. Publishing requires passing validation,
                   confidence ≥ 70%, and an explicit approval (engineer brief §8).
                 </p>
+                {readiness && (
+                  <div className="w-full mt-2 text-[11px] text-muted-foreground">
+                    <span className="font-semibold text-foreground/90">Readiness:</span>{" "}
+                    {readiness.can_publish
+                      ? "Ready"
+                      : readiness.strict_mode_enabled && readiness.blockers.length > 0
+                        ? "Blocked"
+                        : readiness.blockers.length > 0
+                          ? "Would fail strict mode"
+                          : readiness.warnings.length > 0
+                            ? "Warnings"
+                            : "Not ready"}
+                    {readiness.blockers.length > 0 && (
+                      <span className="ml-2 text-destructive">
+                        {readiness.blockers.length} blocker(s)
+                      </span>
+                    )}
+                    {readiness.warnings.length > 0 && (
+                      <span className="ml-2 text-warning">
+                        {readiness.warnings.length} warning(s)
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 

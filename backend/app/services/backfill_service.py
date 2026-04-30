@@ -257,7 +257,7 @@ def ensure_rejection_link(
 
 
 def backfill_jurisdictions(
-    db: Session, *, dry_run: bool = True
+    db: Session, *, tenant_id: str = "default", dry_run: bool = True
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     apply = not dry_run
     changes: list[dict[str, Any]] = []
@@ -269,7 +269,12 @@ def backfill_jurisdictions(
     )
     jc_dry: set[str] = set()
     scratch: dict[str, str] = {}
-    for rule in db.query(models.Rule).order_by(models.Rule.id).all():
+    for rule in (
+        db.query(models.Rule)
+        .filter(models.Rule.tenant_id == tenant_id)
+        .order_by(models.Rule.id)
+        .all()
+    ):
         if rule.jurisdiction_id:
             continue
         code_eff = state_to_us_code(rule.state)
@@ -302,7 +307,7 @@ def backfill_jurisdictions(
 
 
 def backfill_program_variants(
-    db: Session, *, dry_run: bool = True
+    db: Session, *, tenant_id: str = "default", dry_run: bool = True
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     apply = not dry_run
     changes: list[dict[str, Any]] = []
@@ -314,7 +319,12 @@ def backfill_program_variants(
     )
     pv_dry_slugs: set[str] = set()
     scratch: dict[str, str] = {}
-    for rule in db.query(models.Rule).order_by(models.Rule.id).all():
+    for rule in (
+        db.query(models.Rule)
+        .filter(models.Rule.tenant_id == tenant_id)
+        .order_by(models.Rule.id)
+        .all()
+    ):
         if rule.program_variant_ref_id:
             continue
         pv = rule.program_variant
@@ -355,14 +365,19 @@ def backfill_program_variants(
 
 
 def backfill_rejection_links(
-    db: Session, *, dry_run: bool = True
+    db: Session, *, tenant_id: str = "default", dry_run: bool = True
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     apply = not dry_run
     changes: list[dict[str, Any]] = []
     rr_before = int(db.query(func.count(models.RejectionReason.id)).scalar() or 0) if apply else 0
     lr_before = int(db.query(func.count(models.RuleRejectionLink.rule_id)).scalar() or 0) if apply else 0
     reason_scratch: dict[str, str] = {}
-    for rule in db.query(models.Rule).order_by(models.Rule.id).all():
+    for rule in (
+        db.query(models.Rule)
+        .filter(models.Rule.tenant_id == tenant_id)
+        .order_by(models.Rule.id)
+        .all()
+    ):
         pairs = _rejection_pairs_from_rule(rule)
         if not pairs:
             continue
@@ -411,8 +426,8 @@ def _rule_rejection_map_nonempty(rule: models.Rule) -> bool:
     return False
 
 
-def canonical_consistency_report(db: Session) -> dict[str, Any]:
-    rules = db.query(models.Rule).all()
+def canonical_consistency_report(db: Session, *, tenant_id: str = "default") -> dict[str, Any]:
+    rules = db.query(models.Rule).filter(models.Rule.tenant_id == tenant_id).all()
     total = len(rules)
     missing_j = sum(1 for r in rules if not r.jurisdiction_id)
     missing_pv = sum(1 for r in rules if not r.program_variant_ref_id)
@@ -434,8 +449,6 @@ def canonical_consistency_report(db: Session) -> dict[str, Any]:
             rej_map_no_links += 1
 
     by_status = Counter(r.review_status for r in rules)
-    by_tenant = Counter(r.tenant_id for r in rules)
-
     return {
         "total_rules": total,
         "rules_missing_jurisdiction_id": missing_j,
@@ -443,26 +456,26 @@ def canonical_consistency_report(db: Session) -> dict[str, Any]:
         "rules_with_legacy_program_variant_but_no_fk": legacy_pv_no_fk,
         "rules_with_rejection_map_but_no_links": rej_map_no_links,
         "rules_by_review_status": dict(sorted(by_status.items())),
-        "rules_by_tenant_id": dict(sorted(by_tenant.items())),
+        "rules_by_tenant_id": {tenant_id: total},
     }
 
 
 def run_backfill(
-    db: Session, *, target: Target, dry_run: bool = True
+    db: Session, *, target: Target, tenant_id: str = "default", dry_run: bool = True
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """Run one or all backfill targets; caller commits when dry_run is False."""
     all_changes: list[dict[str, Any]] = []
     summary: dict[str, int] = {}
     if target in ("all", "jurisdictions"):
-        ch, sm = backfill_jurisdictions(db, dry_run=dry_run)
+        ch, sm = backfill_jurisdictions(db, tenant_id=tenant_id, dry_run=dry_run)
         all_changes.extend(ch)
         summary.update(sm)
     if target in ("all", "program_variants"):
-        ch, sm = backfill_program_variants(db, dry_run=dry_run)
+        ch, sm = backfill_program_variants(db, tenant_id=tenant_id, dry_run=dry_run)
         all_changes.extend(ch)
         summary.update(sm)
     if target in ("all", "rejection_links"):
-        ch, sm = backfill_rejection_links(db, dry_run=dry_run)
+        ch, sm = backfill_rejection_links(db, tenant_id=tenant_id, dry_run=dry_run)
         all_changes.extend(ch)
         summary.update(sm)
     return all_changes, summary

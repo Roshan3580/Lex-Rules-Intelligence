@@ -114,18 +114,22 @@ def _build_default_steps() -> list[dict[str, Any]]:
     return out
 
 
-def ensure_default_templates(db: Session) -> int:
+def ensure_default_templates(db: Session, *, tenant_id: str = "default") -> int:
     """Idempotently insert the default 'state-tax-filing' workflow.
 
     Returns the number of templates inserted (0 on subsequent calls).
     """
     existing = db.execute(
-        select(models.WorkflowTemplate).where(models.WorkflowTemplate.is_builtin == True)  # noqa: E712
+        select(models.WorkflowTemplate).where(
+            (models.WorkflowTemplate.tenant_id == tenant_id)
+            & (models.WorkflowTemplate.is_builtin == True)  # noqa: E712
+        )
     ).scalars().all()
     if existing:
         return 0
 
     tpl = models.WorkflowTemplate(
+        tenant_id=tenant_id,
         key="state-tax-filing",
         title="State tax filing workflow",
         description=(
@@ -156,6 +160,7 @@ def ensure_default_templates(db: Session) -> int:
 def _resolve_rules_for_stage(
     db: Session,
     *,
+    tenant_id: str = "default",
     state: Optional[str],
     tax_category: Optional[str],
     workflow_stage: Optional[str],
@@ -169,6 +174,7 @@ def _resolve_rules_for_stage(
     base = select(models.Rule).where(
         models.Rule.review_status.in_(("published", "approved", "auto_validated"))
     )
+    base = base.where(models.Rule.tenant_id == tenant_id)
     if state:
         base = base.where(models.Rule.state == state)
     if tax_category:
@@ -205,6 +211,7 @@ def attach_rules_to_steps(
     db: Session,
     steps: list[dict[str, Any]],
     *,
+    tenant_id: str = "default",
     state: Optional[str],
     tax_category: Optional[str],
 ) -> list[dict[str, Any]]:
@@ -214,6 +221,7 @@ def attach_rules_to_steps(
     for step in steps:
         stage_rules = _resolve_rules_for_stage(
             db,
+            tenant_id=tenant_id,
             state=state,
             tax_category=tax_category,
             workflow_stage=step.get("workflow_stage") or step.get("key"),
@@ -255,20 +263,25 @@ def attach_rules_to_steps(
 def list_templates(
     db: Session,
     *,
+    tenant_id: str = "default",
     state: Optional[str] = None,
     tax_category: Optional[str] = None,
     attach_rules: bool = True,
 ) -> list[dict[str, Any]]:
     """Return all templates, optionally with live rule attachment."""
-    ensure_default_templates(db)
-    stmt = select(models.WorkflowTemplate).order_by(models.WorkflowTemplate.created_at.asc())
+    ensure_default_templates(db, tenant_id=tenant_id)
+    stmt = (
+        select(models.WorkflowTemplate)
+        .where(models.WorkflowTemplate.tenant_id == tenant_id)
+        .order_by(models.WorkflowTemplate.created_at.asc())
+    )
     rows = db.execute(stmt).scalars().all()
     out: list[dict[str, Any]] = []
     for tpl in rows:
         steps = list(tpl.steps or [])
         if attach_rules:
             steps = attach_rules_to_steps(
-                db, steps, state=state, tax_category=tax_category
+                db, steps, tenant_id=tenant_id, state=state, tax_category=tax_category
             )
         out.append(_template_payload(tpl, steps))
     return out
@@ -278,14 +291,20 @@ def get_template(
     db: Session,
     template_id: str,
     *,
+    tenant_id: str = "default",
     state: Optional[str] = None,
     tax_category: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
-    tpl = db.get(models.WorkflowTemplate, template_id)
+    tpl = (
+        db.query(models.WorkflowTemplate)
+        .filter(models.WorkflowTemplate.tenant_id == tenant_id)
+        .filter(models.WorkflowTemplate.id == template_id)
+        .first()
+    )
     if not tpl:
         return None
     steps = attach_rules_to_steps(
-        db, list(tpl.steps or []), state=state, tax_category=tax_category
+        db, list(tpl.steps or []), tenant_id=tenant_id, state=state, tax_category=tax_category
     )
     return _template_payload(tpl, steps)
 
@@ -310,6 +329,7 @@ def _template_payload(tpl: models.WorkflowTemplate, steps: list[dict[str, Any]])
 def create_case(
     db: Session,
     *,
+    tenant_id: str = "default",
     state: Optional[str],
     tax_category: Optional[str],
     title: Optional[str] = None,
@@ -318,30 +338,43 @@ def create_case(
     case_id: Optional[str] = None,
     actor: Optional[str] = None,
 ) -> dict[str, Any]:
-    ensure_default_templates(db)
+    ensure_default_templates(db, tenant_id=tenant_id)
 
     tpl: Optional[models.WorkflowTemplate]
     if template_id:
-        tpl = db.get(models.WorkflowTemplate, template_id)
+        tpl = (
+            db.query(models.WorkflowTemplate)
+            .filter(models.WorkflowTemplate.tenant_id == tenant_id)
+            .filter(models.WorkflowTemplate.id == template_id)
+            .first()
+        )
         if tpl is None:
             raise ValueError(f"Workflow template {template_id} not found")
     else:
         tpl = db.execute(
-            select(models.WorkflowTemplate).where(models.WorkflowTemplate.is_builtin == True)  # noqa: E712
+            select(models.WorkflowTemplate).where(
+                (models.WorkflowTemplate.tenant_id == tenant_id)
+                & (models.WorkflowTemplate.is_builtin == True)  # noqa: E712
+            )
         ).scalars().first()
         if tpl is None:
-            ensure_default_templates(db)
+            ensure_default_templates(db, tenant_id=tenant_id)
             tpl = db.execute(
-                select(models.WorkflowTemplate).where(models.WorkflowTemplate.is_builtin == True)  # noqa: E712
+                select(models.WorkflowTemplate).where(
+                    (models.WorkflowTemplate.tenant_id == tenant_id)
+                    & (models.WorkflowTemplate.is_builtin == True)  # noqa: E712
+                )
             ).scalars().first()
 
     snapshot = attach_rules_to_steps(
         db, list(tpl.steps or []) if tpl else _build_default_steps(),
+        tenant_id=tenant_id,
         state=state, tax_category=tax_category,
     )
     runtime_steps = [_init_step_runtime(s) for s in snapshot]
 
     case = models.CaseWorkflow(
+        tenant_id=tenant_id,
         case_id=case_id or _new_case_id(),
         org=org,
         title=title or _default_case_title(state, tax_category),
@@ -374,12 +407,20 @@ def create_case(
     return _case_payload(case)
 
 
-def get_case(db: Session, case_id: str) -> Optional[dict[str, Any]]:
+def get_case(db: Session, case_id: str, *, tenant_id: str = "default") -> Optional[dict[str, Any]]:
     """Look up by either internal id or `case_id` business key."""
-    case = db.get(models.CaseWorkflow, case_id)
+    case = (
+        db.query(models.CaseWorkflow)
+        .filter(models.CaseWorkflow.tenant_id == tenant_id)
+        .filter(models.CaseWorkflow.id == case_id)
+        .first()
+    )
     if case is None:
         case = db.execute(
-            select(models.CaseWorkflow).where(models.CaseWorkflow.case_id == case_id)
+            select(models.CaseWorkflow).where(
+                (models.CaseWorkflow.tenant_id == tenant_id)
+                & (models.CaseWorkflow.case_id == case_id)
+            )
         ).scalars().first()
     if case is None:
         return None
@@ -389,12 +430,17 @@ def get_case(db: Session, case_id: str) -> Optional[dict[str, Any]]:
 def list_cases(
     db: Session,
     *,
+    tenant_id: str = "default",
     state: Optional[str] = None,
     tax_category: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
-    stmt = select(models.CaseWorkflow).order_by(models.CaseWorkflow.created_at.desc())
+    stmt = (
+        select(models.CaseWorkflow)
+        .where(models.CaseWorkflow.tenant_id == tenant_id)
+        .order_by(models.CaseWorkflow.created_at.desc())
+    )
     if state:
         stmt = stmt.where(models.CaseWorkflow.state == state)
     if tax_category:
@@ -410,15 +456,22 @@ def update_step(
     case_pk_or_business_id: str,
     step_key: str,
     *,
+    tenant_id: str = "default",
     completed: Optional[bool] = None,
     notes: Optional[str] = None,
     actor: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
-    case = db.get(models.CaseWorkflow, case_pk_or_business_id)
+    case = (
+        db.query(models.CaseWorkflow)
+        .filter(models.CaseWorkflow.tenant_id == tenant_id)
+        .filter(models.CaseWorkflow.id == case_pk_or_business_id)
+        .first()
+    )
     if case is None:
         case = db.execute(
             select(models.CaseWorkflow).where(
-                models.CaseWorkflow.case_id == case_pk_or_business_id
+                (models.CaseWorkflow.tenant_id == tenant_id)
+                & (models.CaseWorkflow.case_id == case_pk_or_business_id)
             )
         ).scalars().first()
     if case is None:

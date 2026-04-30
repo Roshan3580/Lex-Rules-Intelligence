@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..middleware.rbac import require_role
+from ..middleware.rbac import require_role, tenant_id_dep
 from ..services import audit_service, ingestion_runs, ingestion_service, seed_runner
 from ..services.cache_service import invalidate_enforcement_caches
 
@@ -84,6 +84,7 @@ def _ingest_one_url(
     db: Session,
     run: models.IngestionRun,
     *,
+    tenant_id: str,
     url: str,
     state: Optional[str],
     tax_type: Optional[str],
@@ -93,6 +94,7 @@ def _ingest_one_url(
     try:
         source, chunks, rules, method = ingestion_service.ingest_url(
             db,
+            tenant_id=tenant_id,
             url=url,
             state=state,
             tax_category=tax_type,
@@ -142,6 +144,7 @@ def ingest_source(
     request: Request,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("admin")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     """Add a single source (URL, manual text, or PDF URL) to the index.
 
@@ -187,6 +190,7 @@ def ingest_source(
             try:
                 source, chunks, rules, method = ingestion_service.ingest_text(
                     db,
+                    tenant_id=tenant_id,
                     name=payload.title or "Manual entry",
                     text=payload.text or "",
                     state=payload.state,
@@ -242,6 +246,7 @@ def ingest_source(
                 _ingest_one_url(
                     db,
                     run,
+                    tenant_id=tenant_id,
                     url=u,
                     state=payload.state,
                     tax_type=payload.tax_type,
@@ -275,11 +280,13 @@ def ingest_run(
     payload: schemas.IngestRunRequest | None = None,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("admin")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     """Run ingestion for the curated source list in app/data/sources.yaml."""
     payload = payload or schemas.IngestRunRequest()
     run, results = seed_runner.run_seed_ingestion(
         db,
+        tenant_id=tenant_id,
         only_state=payload.only_state,
         only_tax_type=payload.only_tax_type,
         auto_extract=payload.auto_extract,

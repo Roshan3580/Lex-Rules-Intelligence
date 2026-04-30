@@ -55,9 +55,11 @@ def schedule_send_event(
 
 def send_event_sync(db: Session, event_type: str, payload: dict[str, Any]) -> None:
     """Process all active subscriptions for this event (sync; used from background job)."""
+    tenant_id = str(payload.get("tenant_id") or "default")
     subs = (
         db.query(models.WebhookSubscription)
         .filter(models.WebhookSubscription.active.is_(True))
+        .filter(models.WebhookSubscription.tenant_id == tenant_id)
         .all()
     )
     for sub in subs:
@@ -168,7 +170,7 @@ def dispatch_to_subscriber(
 
 
 def resend_delivery_attempt(
-    db: Session, *, delivery_id: str
+    db: Session, *, delivery_id: str, tenant_id: str = "default"
 ) -> models.WebhookDeliveryAttempt:
     """Create a new attempt row based on an existing delivery id and dispatch immediately."""
     existing = (
@@ -181,11 +183,12 @@ def resend_delivery_attempt(
 
     sub = (
         db.query(models.WebhookSubscription)
+        .filter(models.WebhookSubscription.tenant_id == tenant_id)
         .filter(models.WebhookSubscription.id == existing.subscription_id)
         .first()
     )
     if sub is None:
-        raise ValueError("subscription missing")
+        raise LookupError("subscription missing")
     if not sub.active:
         raise ValueError("subscription inactive")
 

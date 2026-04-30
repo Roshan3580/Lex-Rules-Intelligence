@@ -67,6 +67,7 @@ def _payload_hint_tokens(payload: Optional[dict[str, Any]]) -> set[str]:
 def match_rules_for_outcome(
     db: Session,
     *,
+    tenant_id: str = "default",
     state: str,
     tax_category: str,
     workflow_stage: Optional[str],
@@ -76,7 +77,7 @@ def match_rules_for_outcome(
     """Return heuristic ``matched_rule_ids`` ordered by score and a confidence 0–1."""
     rules, _warn = rule_engine.get_applicable_rules(
         db,
-        tenant_id="default",
+        tenant_id=tenant_id,
         state=state,
         tax_category=tax_category,
         workflow_stage=workflow_stage,
@@ -133,6 +134,7 @@ def classify_coverage(
 def create_outcome(
     db: Session,
     *,
+    tenant_id: str = "default",
     submission_id: Optional[str],
     state: str,
     tax_category: str,
@@ -146,6 +148,7 @@ def create_outcome(
     pl = payload or {}
     matched_ids, match_conf = match_rules_for_outcome(
         db,
+        tenant_id=tenant_id,
         state=st,
         tax_category=tax_category,
         workflow_stage=workflow_stage,
@@ -155,7 +158,7 @@ def create_outcome(
 
     val = rule_engine.validate_submission(
         db,
-        tenant_id="default",
+        tenant_id=tenant_id,
         state=st,
         tax_category=tax_category,
         workflow_stage=workflow_stage,
@@ -173,6 +176,7 @@ def create_outcome(
     root = rejection_reason.strip()[:240] if rejection_reason else None
 
     ev = models.OutcomeEvent(
+        tenant_id=tenant_id,
         submission_id=submission_id,
         state=st,
         tax_category=tax_category,
@@ -201,12 +205,17 @@ def create_outcome(
 def list_outcomes(
     db: Session,
     *,
+    tenant_id: str = "default",
     state: Optional[str],
     tax_category: Optional[str],
     coverage_status: Optional[str],
     limit: int = 100,
 ) -> list[models.OutcomeEvent]:
-    q = db.query(models.OutcomeEvent).order_by(models.OutcomeEvent.created_at.desc())
+    q = (
+        db.query(models.OutcomeEvent)
+        .filter(models.OutcomeEvent.tenant_id == tenant_id)
+        .order_by(models.OutcomeEvent.created_at.desc())
+    )
     if state:
         q = q.filter(
             models.OutcomeEvent.state == rule_engine.normalize_state(state)

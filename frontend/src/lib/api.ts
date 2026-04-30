@@ -226,6 +226,7 @@ export interface AuditLogsResponse {
 export type AppRoleId = "admin" | "reviewer" | "viewer";
 
 const ROLE_STORAGE_KEY = "rules_intel_app_role";
+export const TENANT_STORAGE_KEY = "rules_intel_tenant_id";
 export const DEMO_USER_ID = "demo-user";
 
 function normalizeLegacyStoredRole(raw: string | null): AppRoleId | null {
@@ -271,11 +272,35 @@ export function setAppRole(role: AppRoleId): void {
   }
 }
 
+export function getTenantId(): string {
+  try {
+    const v = typeof localStorage !== "undefined" ? localStorage.getItem(TENANT_STORAGE_KEY) : null;
+    const t = (v ?? "").trim();
+    if (t) return t;
+  } catch {
+    /* ignore */
+  }
+  return "default";
+}
+
+export function setTenantId(tenantId: string): void {
+  const t = (tenantId ?? "").trim() || "default";
+  try {
+    localStorage.setItem(TENANT_STORAGE_KEY, t);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("rules_intel_tenant_id"));
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 export function rbacHeaders(existing?: HeadersInit): HeadersInit {
   const h =
     existing instanceof Headers ? existing : new Headers(existing ?? undefined);
   h.set("X-User-Role", getApiRoleHeader());
   h.set("X-User-Id", DEMO_USER_ID);
+  h.set("X-Tenant-Id", getTenantId());
   return h;
 }
 
@@ -529,7 +554,11 @@ export interface Health {
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string,
+    public detail?: unknown,
+  ) {
     super(message);
   }
 }
@@ -554,13 +583,15 @@ async function request<T>(
       );
     }
     let detail = res.statusText;
+    let detailObj: unknown = undefined;
     try {
       const data = await res.json();
       detail = data.detail ?? JSON.stringify(data);
+      detailObj = data.detail ?? data;
     } catch {
       // ignore
     }
-    throw new ApiError(res.status, `${res.status} ${detail}`);
+    throw new ApiError(res.status, `${res.status} ${detail}`, detailObj);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -666,6 +697,9 @@ export const api = {
       method: "POST",
       json: payload,
     }),
+
+  platformGovernanceConfig: () =>
+    request<GovernanceConfigOut>("/api/platform/governance-config"),
 
   webhookSubscriptions: (activeOnly = false) =>
     request<WebhookSubscriptionRow[]>(
@@ -833,6 +867,9 @@ export const api = {
 
   validateRule: (id: string) =>
     request<RuleAssessment>(`/api/rules/${id}/validate`, { method: "POST" }),
+
+  publishReadiness: (id: string) =>
+    request<PublishReadinessOut>(`/api/rules/${id}/publish-readiness`),
 
   ruleConflicts: (id: string) =>
     request<Rule[]>(`/api/rules/${id}/conflicts`),
@@ -1080,6 +1117,26 @@ export interface CanonicalBackfillResponseOut {
   target: string;
   changes: Record<string, unknown>[];
   summary: Record<string, number>;
+}
+
+export interface PublishDiagnosticItemOut {
+  code: string;
+  message: string;
+  severity: "error" | "warning";
+}
+
+export interface PublishReadinessOut {
+  rule_id: string;
+  can_publish: boolean;
+  strict_mode_enabled: boolean;
+  blockers: PublishDiagnosticItemOut[];
+  warnings: PublishDiagnosticItemOut[];
+  checked_fields: Record<string, boolean>;
+}
+
+export interface GovernanceConfigOut {
+  strict_publish_checks: boolean;
+  min_publish_confidence: number;
 }
 
 export interface WebhookSubscriptionRow {

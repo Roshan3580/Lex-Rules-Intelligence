@@ -234,20 +234,26 @@ def compute_checksum(text: str) -> str:
     return hashlib.sha256((text or "").encode("utf-8", errors="ignore")).hexdigest()
 
 
-def find_source_by_checksum(db: Session, checksum: str) -> Optional[models.Source]:
+def find_source_by_checksum(
+    db: Session, checksum: str, *, tenant_id: str = "default"
+) -> Optional[models.Source]:
     return (
         db.query(models.Source)
+        .filter(models.Source.tenant_id == tenant_id)
         .filter(models.Source.checksum == checksum)
         .first()
     )
 
 
-def find_source_by_url(db: Session, url: str) -> Optional[models.Source]:
+def find_source_by_url(
+    db: Session, url: str, *, tenant_id: str = "default"
+) -> Optional[models.Source]:
     """Match by either url or canonical_url (after redirects)."""
     if not url:
         return None
     return (
         db.query(models.Source)
+        .filter(models.Source.tenant_id == tenant_id)
         .filter((models.Source.url == url) | (models.Source.canonical_url == url))
         .order_by(models.Source.created_at.desc())
         .first()
@@ -312,6 +318,7 @@ def _mark_failed(
 def ingest_text(
     db: Session,
     *,
+    tenant_id: str = "default",
     name: str,
     text: str,
     state: Optional[str] = None,
@@ -323,7 +330,7 @@ def ingest_text(
 ) -> tuple[models.Source, int, int, str]:
     checksum = compute_checksum(text)
     if skip_if_duplicate:
-        existing = find_source_by_checksum(db, checksum)
+        existing = find_source_by_checksum(db, checksum, tenant_id=tenant_id)
         if existing is not None:
             existing.last_checked = datetime.utcnow()
             db.commit()
@@ -331,6 +338,7 @@ def ingest_text(
             return existing, 0, 0, "duplicate"
 
     source = models.Source(
+        tenant_id=tenant_id,
         source_type=source_type,
         name=name,
         url=url,
@@ -364,6 +372,7 @@ def ingest_text(
 def ingest_url(
     db: Session,
     *,
+    tenant_id: str = "default",
     url: str,
     state: Optional[str] = None,
     tax_category: Optional[str] = None,
@@ -383,14 +392,16 @@ def ingest_url(
 
     if skip_if_duplicate:
         # First try checksum (content-identical), then URL (re-fetched).
-        dup_by_hash = find_source_by_checksum(db, checksum)
+        dup_by_hash = find_source_by_checksum(db, checksum, tenant_id=tenant_id)
         if dup_by_hash is not None:
             dup_by_hash.last_checked = now
             db.commit()
             db.refresh(dup_by_hash)
             return dup_by_hash, 0, 0, "duplicate"
 
-        existing = find_source_by_url(db, url) or find_source_by_url(db, canonical)
+        existing = find_source_by_url(db, url, tenant_id=tenant_id) or find_source_by_url(
+            db, canonical, tenant_id=tenant_id
+        )
         if existing is not None and existing.checksum != checksum:
             # Same URL, content changed → snapshot the OLD state, then update
             # in place. We preserve rules so admin curation isn't wiped on
@@ -424,6 +435,7 @@ def ingest_url(
                 raise
 
     source = models.Source(
+        tenant_id=tenant_id,
         source_type=src_type,
         name=name or title or url,
         url=url,
@@ -457,6 +469,7 @@ def ingest_url(
 def ingest_upload(
     db: Session,
     *,
+    tenant_id: str = "default",
     filename: str,
     data: bytes,
     state: Optional[str] = None,
@@ -496,7 +509,7 @@ def ingest_upload(
 
     checksum = compute_checksum(text)
     if skip_if_duplicate:
-        existing = find_source_by_checksum(db, checksum)
+        existing = find_source_by_checksum(db, checksum, tenant_id=tenant_id)
         if existing is not None:
             existing.last_checked = datetime.utcnow()
             db.commit()
@@ -504,6 +517,7 @@ def ingest_upload(
             return existing, 0, 0, "duplicate"
 
     source = models.Source(
+        tenant_id=tenant_id,
         source_type=source_type,
         name=filename,
         file_path=str(file_path),

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from .. import schemas
 from ..config import settings
 from ..database import get_db
+from ..middleware.rbac import tenant_id_dep
 from ..services import admin_service, review_service
 from ..services.embeddings import embedder
 from ..services.retrieval_service import last_mode as retrieval_last_mode
@@ -51,8 +52,8 @@ def get_taxonomy():
 
 
 @router.get("/summary", response_model=schemas.AdminSummaryOut)
-def get_summary(db: Session = Depends(get_db)):
-    s = admin_service.admin_summary(db)
+def get_summary(db: Session = Depends(get_db), tenant_id: str = Depends(tenant_id_dep)):
+    s = admin_service.admin_summary(db, tenant_id=tenant_id)
     vstats = vector_store.stats()
     return schemas.AdminSummaryOut(
         total_sources=s["total_sources"],
@@ -74,8 +75,9 @@ def get_summary(db: Session = Depends(get_db)):
 def list_audit(
     limit: int = 80,
     db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
-    rows = review_service.list_all_events(db, limit=limit)
+    rows = review_service.list_all_events(db, tenant_id=tenant_id, limit=limit)
     out: list[schemas.ReviewAuditEventOut] = []
     for ev, rule in rows:
         out.append(

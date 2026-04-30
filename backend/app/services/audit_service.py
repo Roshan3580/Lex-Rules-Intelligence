@@ -60,6 +60,7 @@ def audit_log_public_from_row(entry: models.AuditLogEntry) -> AuditLogPublic:
 def list_audit_logs(
     db: Session,
     *,
+    tenant_id: str = "default",
     entity_type: str | None = None,
     entity_id: str | None = None,
     action: str | None = None,
@@ -70,7 +71,7 @@ def list_audit_logs(
     """Return audit rows (newest first) and total matching count. ``limit`` is capped at 500."""
     lim = max(1, min(AUDIT_LIST_MAX_LIMIT, int(limit)))
     off = max(0, int(offset))
-    q = db.query(models.AuditLogEntry)
+    q = db.query(models.AuditLogEntry).filter(models.AuditLogEntry.tenant_id == tenant_id)
     if entity_type:
         q = q.filter(models.AuditLogEntry.resource_type == entity_type)
     if entity_id:
@@ -100,6 +101,8 @@ def log(
     tenant_id: str = "default",
 ) -> None:
     ctx = get_rbac_audit_context()
+    if ctx and ctx.get("tenant_id") and tenant_id == "default":
+        tenant_id = str(ctx.get("tenant_id") or "default")
     resolved_actor = actor
     if resolved_actor is None and ctx:
         resolved_actor = str(ctx.get("user_id") or "demo-user")

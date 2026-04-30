@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..middleware.rbac import require_role
+from ..middleware.rbac import require_role, tenant_id_dep
 from ..services.backfill_service import canonical_consistency_report, run_backfill
 from ..services.cache_service import (
     NAMESPACE_RULE_LOOKUP,
@@ -69,8 +69,9 @@ def cache_clear(
 def platform_canonical_report(
     db: Session = Depends(get_db),
     _: str = Depends(require_role("reviewer")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
-    raw = canonical_consistency_report(db)
+    raw = canonical_consistency_report(db, tenant_id=tenant_id)
     return schemas.CanonicalConsistencyReportOut(**raw)
 
 
@@ -79,6 +80,7 @@ def platform_backfill(
     body: schemas.CanonicalBackfillRequest,
     request: Request,
     db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     """Dry-run: reviewer or admin. Persist: admin only."""
     role = getattr(request.state, "user_role", None) or "viewer"
@@ -101,7 +103,9 @@ def platform_backfill(
                 "current_role": role,
             },
         )
-    changes, summary = run_backfill(db, target=body.target, dry_run=body.dry_run)
+    changes, summary = run_backfill(
+        db, target=body.target, tenant_id=tenant_id, dry_run=body.dry_run
+    )
     if not body.dry_run:
         db.commit()
     return schemas.CanonicalBackfillResponse(
@@ -109,4 +113,15 @@ def platform_backfill(
         target=body.target,
         changes=changes,
         summary=summary,
+    )
+
+
+@router.get("/governance-config", response_model=schemas.GovernanceConfigOut)
+def governance_config(_: str = Depends(require_role("reviewer"))):
+    from ..config import settings
+    from ..services.validation import MIN_PUBLISH_CONFIDENCE
+
+    return schemas.GovernanceConfigOut(
+        strict_publish_checks=bool(getattr(settings, "strict_publish_checks", False)),
+        min_publish_confidence=float(MIN_PUBLISH_CONFIDENCE),
     )

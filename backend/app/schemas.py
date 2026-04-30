@@ -1032,5 +1032,25 @@ class CanonicalBackfillResponse(BaseModel):
     summary: dict[str, int]
 
 
+class PublishDiagnosticItemOut(BaseModel):
+    code: str
+    message: str
+    severity: Literal["error", "warning"]
+
+
+class PublishReadinessOut(BaseModel):
+    rule_id: str
+    can_publish: bool
+    strict_mode_enabled: bool
+    blockers: list[PublishDiagnosticItemOut]
+    warnings: list[PublishDiagnosticItemOut]
+    checked_fields: dict[str, bool]
+
+
+class GovernanceConfigOut(BaseModel):
+    strict_publish_checks: bool
+    min_publish_confidence: float
+
+
 SourceDetail.model_rebuild()
 QueryResponse.model_rebuild()

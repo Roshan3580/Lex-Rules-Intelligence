@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..middleware.rbac import require_role
+from ..middleware.rbac import require_role, tenant_id_dep
 from ..services import ingestion_service
 from ..services.cache_service import invalidate_enforcement_caches
 
@@ -28,14 +28,17 @@ def reindex_vectors(
     return {"reindexed_chunks": count, **vector_store.stats()}
 
 
-def _to_out(source: models.Source, db: Session) -> schemas.SourceOut:
+def _to_out(source: models.Source, db: Session, *, tenant_id: str) -> schemas.SourceOut:
     chunk_count = (
         db.query(models.SourceChunk)
         .filter(models.SourceChunk.source_id == source.id)
         .count()
     )
     rule_count = (
-        db.query(models.Rule).filter(models.Rule.source_id == source.id).count()
+        db.query(models.Rule)
+        .filter(models.Rule.tenant_id == tenant_id)
+        .filter(models.Rule.source_id == source.id)
+        .count()
     )
     return schemas.SourceOut(
         id=source.id,
@@ -64,14 +67,15 @@ def list_sources(
     state: Optional[str] = None,
     tax_category: Optional[str] = None,
     db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
-    q = db.query(models.Source)
+    q = db.query(models.Source).filter(models.Source.tenant_id == tenant_id)
     if state:
         q = q.filter(models.Source.state == state)
     if tax_category:
         q = q.filter(models.Source.tax_category == tax_category)
     sources = q.order_by(models.Source.created_at.desc()).all()
-    return [_to_out(s, db) for s in sources]
+    return [_to_out(s, db, tenant_id=tenant_id) for s in sources]
 
 
 @router.get("/{source_id}", response_model=schemas.SourceDetail)
@@ -80,11 +84,17 @@ def get_source(
     chunk_limit: int = 50,
     rule_limit: int = 50,
     db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
-    src = db.query(models.Source).filter(models.Source.id == source_id).first()
+    src = (
+        db.query(models.Source)
+        .filter(models.Source.tenant_id == tenant_id)
+        .filter(models.Source.id == source_id)
+        .first()
+    )
     if src is None:
         raise HTTPException(status_code=404, detail="Source not found")
-    base = _to_out(src, db).model_dump()
+    base = _to_out(src, db, tenant_id=tenant_id).model_dump()
 
     chunk_rows = (
         db.query(models.SourceChunk)
@@ -106,6 +116,7 @@ def get_source(
 
     rule_rows = (
         db.query(models.Rule)
+        .filter(models.Rule.tenant_id == tenant_id)
         .filter(models.Rule.source_id == src.id)
         .order_by(models.Rule.created_at.desc())
         .limit(rule_limit)
@@ -125,8 +136,15 @@ def get_source(
 @router.get(
     "/{source_id}/versions", response_model=list[schemas.SourceVersionOut]
 )
-def list_source_versions(source_id: str, db: Session = Depends(get_db)):
-    src = db.query(models.Source).filter(models.Source.id == source_id).first()
+def list_source_versions(
+    source_id: str, db: Session = Depends(get_db), tenant_id: str = Depends(tenant_id_dep)
+):
+    src = (
+        db.query(models.Source)
+        .filter(models.Source.tenant_id == tenant_id)
+        .filter(models.Source.id == source_id)
+        .first()
+    )
     if src is None:
         raise HTTPException(status_code=404, detail="Source not found")
     rows = (
@@ -157,9 +175,15 @@ def check_source(
     source_id: str,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("admin")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     """Health-check the URL of a source (HEAD/GET) and update last_checked."""
-    src = db.query(models.Source).filter(models.Source.id == source_id).first()
+    src = (
+        db.query(models.Source)
+        .filter(models.Source.tenant_id == tenant_id)
+        .filter(models.Source.id == source_id)
+        .first()
+    )
     if src is None:
         raise HTTPException(status_code=404, detail="Source not found")
     target = src.url or src.canonical_url
@@ -183,6 +207,7 @@ async def upload_source(
     auto_extract: bool = Form(default=True),
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("admin")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     try:
         data = await file.read()
@@ -190,6 +215,7 @@ async def upload_source(
             raise HTTPException(status_code=400, detail="Empty upload")
         source, chunks, rules, method = ingestion_service.ingest_upload(
             db,
+            tenant_id=tenant_id,
             filename=file.filename or "upload",
             data=data,
             state=state,
@@ -202,7 +228,7 @@ async def upload_source(
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {exc}")
     invalidate_enforcement_caches()
     return schemas.IngestResult(
-        source=_to_out(source, db),
+        source=_to_out(source, db, tenant_id=tenant_id),
         chunks_created=chunks,
         rules_created=rules,
         extraction_method=method,
@@ -214,10 +240,12 @@ def ingest_url_endpoint(
     payload: schemas.IngestUrlRequest,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("admin")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     try:
         source, chunks, rules, method = ingestion_service.ingest_url(
             db,
+            tenant_id=tenant_id,
             url=payload.url,
             state=payload.state,
             tax_category=payload.tax_category,
@@ -228,7 +256,7 @@ def ingest_url_endpoint(
         raise HTTPException(status_code=400, detail=f"URL ingestion failed: {exc}")
     invalidate_enforcement_caches()
     return schemas.IngestResult(
-        source=_to_out(source, db),
+        source=_to_out(source, db, tenant_id=tenant_id),
         chunks_created=chunks,
         rules_created=rules,
         extraction_method=method,
@@ -240,11 +268,13 @@ def ingest_text_endpoint(
     payload: schemas.IngestTextRequest,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("admin")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     if not payload.text.strip():
         raise HTTPException(status_code=400, detail="Empty text")
     source, chunks, rules, method = ingestion_service.ingest_text(
         db,
+        tenant_id=tenant_id,
         name=payload.name,
         text=payload.text,
         state=payload.state,
@@ -253,7 +283,7 @@ def ingest_text_endpoint(
     )
     invalidate_enforcement_caches()
     return schemas.IngestResult(
-        source=_to_out(source, db),
+        source=_to_out(source, db, tenant_id=tenant_id),
         chunks_created=chunks,
         rules_created=rules,
         extraction_method=method,
@@ -265,8 +295,14 @@ def delete_source(
     source_id: str,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("admin")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
-    src = db.query(models.Source).filter(models.Source.id == source_id).first()
+    src = (
+        db.query(models.Source)
+        .filter(models.Source.tenant_id == tenant_id)
+        .filter(models.Source.id == source_id)
+        .first()
+    )
     if src is None:
         raise HTTPException(status_code=404, detail="Source not found")
     db.delete(src)

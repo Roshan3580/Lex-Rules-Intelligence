@@ -5,6 +5,7 @@ import {
   Database,
   FileUp,
   Gauge,
+  Gavel,
   Layers,
   Link2,
   Loader2,
@@ -33,8 +34,11 @@ import {
   CacheMetricsOut,
   CanonicalBackfillResponseOut,
   CanonicalConsistencyReportOut,
+  GovernanceConfigOut,
   getAppRole,
+  getTenantId,
   setAppRole,
+  setTenantId,
   ReviewAuditEvent,
   ReviewStatus,
   Rule,
@@ -76,6 +80,7 @@ const Admin = () => {
   const [cacheMetrics, setCacheMetrics] = useState<CacheMetricsOut | null>(null);
   const [canonicalReport, setCanonicalReport] = useState<CanonicalConsistencyReportOut | null>(null);
   const [lastCanonicalBackfill, setLastCanonicalBackfill] = useState<CanonicalBackfillResponseOut | null>(null);
+  const [governanceConfig, setGovernanceConfig] = useState<GovernanceConfigOut | null>(null);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [url, setUrl] = useState("");
@@ -117,9 +122,15 @@ const Admin = () => {
         } catch {
           setCanonicalReport(null);
         }
+        try {
+          setGovernanceConfig(await api.platformGovernanceConfig());
+        } catch {
+          setGovernanceConfig(null);
+        }
       } else {
         setCacheMetrics(null);
         setCanonicalReport(null);
+        setGovernanceConfig(null);
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -138,9 +149,27 @@ const Admin = () => {
     return () => window.removeEventListener("rules_intel_app_role", sync);
   }, []);
 
+  const [tenant, setTenant] = useState<string>(() => getTenantId());
+
+  useEffect(() => {
+    const sync = () => setTenant(getTenantId());
+    window.addEventListener("rules_intel_tenant_id", sync);
+    return () => window.removeEventListener("rules_intel_tenant_id", sync);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [tenant, load]);
+
   const onRoleChange = (v: AppRoleId) => {
     setRole(v);
     setAppRole(v);
+  };
+
+  const onTenantChange = (v: string) => {
+    const t = (v ?? "").trim() || "default";
+    setTenant(t);
+    setTenantId(t);
   };
 
   async function onIngestUrl(e: React.FormEvent) {
@@ -297,7 +326,27 @@ const Admin = () => {
               </SelectContent>
             </Select>
           </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-[10px] uppercase text-muted-foreground">Tenant (demo isolation)</Label>
+            <Select value={tenant} onValueChange={onTenantChange}>
+              <SelectTrigger className="w-[200px] h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">default</SelectItem>
+                <SelectItem value="demo-client-a">demo-client-a</SelectItem>
+                <SelectItem value="demo-client-b">demo-client-b</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-border/80 bg-secondary/25 px-4 py-3 text-xs text-muted-foreground max-w-3xl">
+        <span className="font-medium text-foreground">Tenant isolation is header-based demo isolation.</span>{" "}
+        Current tenant:{" "}
+        <code className="text-[10px] bg-secondary px-1 rounded">{tenant}</code>. API calls send{" "}
+        <code className="text-[10px] bg-secondary px-1 rounded">X-Tenant-Id</code>, and lists/KPIs are scoped to it.
       </div>
 
       <Link
@@ -507,6 +556,48 @@ const Admin = () => {
               </ul>
             </div>
           )}
+        </div>
+      )}
+
+      {governanceConfig && !isViewer && (
+        <div className="rounded-2xl glass overflow-hidden border border-border/70">
+          <div className="p-5 border-b border-border flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-xl bg-secondary border border-border flex items-center justify-center shrink-0">
+                <Gavel className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold">Publish Governance</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Strict mode can block publish on missing governance fields while still allowing readiness previews.
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/app/review"
+              className="text-xs text-primary hover:underline shrink-0"
+            >
+              Open Review Queue
+            </Link>
+          </div>
+          <div className="p-5 grid sm:grid-cols-2 gap-4 text-sm">
+            <div className="rounded-xl bg-secondary/30 border border-border/60 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
+                STRICT_PUBLISH_CHECKS
+              </p>
+              <p className="font-mono text-lg font-semibold">
+                {governanceConfig.strict_publish_checks ? "true" : "false"}
+              </p>
+            </div>
+            <div className="rounded-xl bg-secondary/30 border border-border/60 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
+                MIN_PUBLISH_CONFIDENCE
+              </p>
+              <p className="font-mono text-lg font-semibold">
+                {governanceConfig.min_publish_confidence.toFixed(2)}
+              </p>
+            </div>
+          </div>
         </div>
       )}
 

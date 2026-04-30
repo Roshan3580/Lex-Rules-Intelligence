@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..middleware.rbac import require_role
+from ..middleware.rbac import require_role, tenant_id_dep
 from ..services import review_service, validation, versioning
 from ..services.backfill_service import sync_canonical_fields_for_new_rule
 from ..services.cache_service import invalidate_enforcement_caches
+from ..services.governance_service import publish_diagnostics
 
 router = APIRouter(prefix="/api/rules", tags=["rules"])
 
@@ -26,9 +27,11 @@ def list_rules(
     workflow_stage: Optional[str] = None,
     limit: int = 200,
     db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     rules = review_service.list_rules(
         db,
+        tenant_id=tenant_id,
         state=state,
         tax_category=tax_category or tax_type,
         review_status=review_status,
@@ -39,8 +42,8 @@ def list_rules(
 
 
 @router.get("/{rule_id}", response_model=schemas.RuleOut)
-def get_rule(rule_id: str, db: Session = Depends(get_db)):
-    rule = review_service.get_rule(db, rule_id)
+def get_rule(rule_id: str, db: Session = Depends(get_db), tenant_id: str = Depends(tenant_id_dep)):
+    rule = review_service.get_rule(db, rule_id, tenant_id=tenant_id)
     if rule is None:
         raise HTTPException(status_code=404, detail="Rule not found")
     return schemas.RuleOut.model_validate(rule)
@@ -51,8 +54,10 @@ def create_rule(
     payload: schemas.RuleCreate,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("admin")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     rule = models.Rule(
+        tenant_id=tenant_id,
         state=payload.state,
         tax_category=payload.tax_category,
         rule_category=payload.rule_category,
@@ -98,8 +103,12 @@ def create_rule(
 
 
 @router.get("/{rule_id}/versions", response_model=list[schemas.RuleVersionOut])
-def list_rule_versions(rule_id: str, db: Session = Depends(get_db)):
-    rule = review_service.get_rule(db, rule_id)
+def list_rule_versions(
+    rule_id: str,
+    db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
+):
+    rule = review_service.get_rule(db, rule_id, tenant_id=tenant_id)
     if rule is None:
         raise HTTPException(status_code=404, detail="Rule not found")
     rows = (
@@ -116,13 +125,14 @@ def validate_rule(
     rule_id: str,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("reviewer")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     """Re-run validation + dedup/conflict detection on an existing rule.
 
     Returns the assessment without mutating the rule. Use this from the
     Admin/Review UI to preview what would happen on publish.
     """
-    rule = review_service.get_rule(db, rule_id)
+    rule = review_service.get_rule(db, rule_id, tenant_id=tenant_id)
     if rule is None:
         raise HTTPException(status_code=404, detail="Rule not found")
     payload = validation._rule_to_payload(rule)
@@ -140,9 +150,47 @@ def validate_rule(
     )
 
 
+@router.get(
+    "/{rule_id}/publish-readiness",
+    response_model=schemas.PublishReadinessOut,
+)
+def publish_readiness(
+    rule_id: str,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_role("reviewer")),
+    tenant_id: str = Depends(tenant_id_dep),
+):
+    rule = review_service.get_rule(db, rule_id, tenant_id=tenant_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Rule not found")
+
+    from ..config import settings
+    from ..services import validation as validation_service
+
+    strict_enabled = bool(getattr(settings, "strict_publish_checks", False))
+    # Current permissive gate (strict-only blockers are not included when strict is disabled).
+    ok_permissive, _blockers = validation_service.can_publish(rule)
+
+    rep = publish_diagnostics(rule)
+    can_publish = ok_permissive if not strict_enabled else (ok_permissive and len(rep.blockers) == 0)
+
+    return schemas.PublishReadinessOut(
+        rule_id=rule.id,
+        can_publish=bool(can_publish),
+        strict_mode_enabled=strict_enabled,
+        blockers=[schemas.PublishDiagnosticItemOut(**b.__dict__) for b in rep.blockers],
+        warnings=[schemas.PublishDiagnosticItemOut(**w.__dict__) for w in rep.warnings],
+        checked_fields=dict(rep.checked_fields),
+    )
+
+
 @router.get("/{rule_id}/conflicts", response_model=list[schemas.RuleOut])
-def list_rule_conflicts(rule_id: str, db: Session = Depends(get_db)):
-    rule = review_service.get_rule(db, rule_id)
+def list_rule_conflicts(
+    rule_id: str,
+    db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
+):
+    rule = review_service.get_rule(db, rule_id, tenant_id=tenant_id)
     if rule is None:
         raise HTTPException(status_code=404, detail="Rule not found")
     payload = validation._rule_to_payload(rule)

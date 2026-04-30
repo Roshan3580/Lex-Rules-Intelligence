@@ -81,6 +81,7 @@ def _expand_with_crawl(spec: dict[str, Any]) -> list[dict[str, Any]]:
 def run_seed_ingestion(
     db: Session,
     *,
+    tenant_id: str = "default",
     only_state: Optional[str] = None,
     only_tax_type: Optional[str] = None,
     auto_extract: bool = True,
@@ -138,6 +139,7 @@ def run_seed_ingestion(
         try:
             source, chunks, rules, method = ingestion_service.ingest_url(
                 db,
+                tenant_id=tenant_id,
                 url=url,
                 state=state,
                 tax_category=tax_type,

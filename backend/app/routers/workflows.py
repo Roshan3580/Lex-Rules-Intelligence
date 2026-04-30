@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
-from ..middleware.rbac import require_role
+from ..middleware.rbac import require_role, tenant_id_dep
 from ..services import workflow_engine, workflows_service
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
@@ -32,9 +32,10 @@ def list_templates(
     state: Optional[str] = None,
     tax_category: Optional[str] = None,
     db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     return workflows_service.list_templates(
-        db, state=state, tax_category=tax_category, attach_rules=True
+        db, tenant_id=tenant_id, state=state, tax_category=tax_category, attach_rules=True
     )
 
 
@@ -44,9 +45,10 @@ def get_template(
     state: Optional[str] = None,
     tax_category: Optional[str] = None,
     db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     tpl = workflows_service.get_template(
-        db, template_id, state=state, tax_category=tax_category
+        db, template_id, tenant_id=tenant_id, state=state, tax_category=tax_category
     )
     if tpl is None:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -58,10 +60,12 @@ def create_case(
     payload: schemas.CreateCaseRequest,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("reviewer")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     try:
         return workflows_service.create_case(
             db,
+            tenant_id=tenant_id,
             state=payload.state,
             tax_category=payload.tax_category,
             title=payload.title,
@@ -81,15 +85,16 @@ def list_cases(
     status: Optional[str] = None,
     limit: int = 50,
     db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     return workflows_service.list_cases(
-        db, state=state, tax_category=tax_category, status=status, limit=limit
+        db, tenant_id=tenant_id, state=state, tax_category=tax_category, status=status, limit=limit
     )
 
 
 @router.get("/cases/{case_id}", response_model=schemas.CaseWorkflowOut)
-def get_case(case_id: str, db: Session = Depends(get_db)):
-    case = workflows_service.get_case(db, case_id)
+def get_case(case_id: str, db: Session = Depends(get_db), tenant_id: str = Depends(tenant_id_dep)):
+    case = workflows_service.get_case(db, case_id, tenant_id=tenant_id)
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
     return case
@@ -100,10 +105,12 @@ def workflow_start(
     payload: schemas.WorkflowStartBody,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("reviewer")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     try:
         return workflow_engine.run_start(
             db,
+            tenant_id=tenant_id,
             state=payload.state,
             tax_category=payload.tax_category,
             title=payload.title,
@@ -123,11 +130,13 @@ def workflow_advance(
     payload: schemas.WorkflowAdvanceBody,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("reviewer")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     try:
         return workflow_engine.advance(
             db,
             case_identifier,
+            tenant_id=tenant_id,
             validation_payload=payload.validation_payload,
             actor=payload.actor,
         )
@@ -144,6 +153,7 @@ def update_step(
     payload: schemas.UpdateStepRequest,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("reviewer")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     try:
         case = workflows_service.update_step(
@@ -153,6 +163,7 @@ def update_step(
             completed=payload.completed,
             notes=payload.notes,
             actor=payload.actor,
+            tenant_id=tenant_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

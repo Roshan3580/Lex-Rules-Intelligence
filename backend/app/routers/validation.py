@@ -9,15 +9,16 @@ from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
-from ..middleware.rbac import require_role
+from ..middleware.rbac import require_role, tenant_id_dep
 from ..services import outcomes_service, rule_engine
 from ..services.webhook_delivery_service import schedule_send_event
 
 router = APIRouter(prefix="/api", tags=["enforcement"])
 
 
-def _validation_payload_for_webhook(raw: dict[str, Any]) -> dict[str, Any]:
+def _validation_payload_for_webhook(raw: dict[str, Any], *, tenant_id: str) -> dict[str, Any]:
     return {
+        "tenant_id": tenant_id,
         "valid": raw["valid"],
         "risk_level": raw["risk_level"],
         "violations": [
@@ -94,10 +95,11 @@ def validate_submission_endpoint(
     background_tasks: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     raw = rule_engine.validate_submission(
         db,
-        tenant_id="default",
+        tenant_id=tenant_id,
         state=body.state,
         tax_category=body.tax_category,
         workflow_stage=body.workflow_stage,
@@ -126,7 +128,7 @@ def validate_submission_endpoint(
     schedule_send_event(
         background_tasks,
         "submission.validated",
-        _validation_payload_for_webhook(raw),
+        _validation_payload_for_webhook(raw, tenant_id=tenant_id),
     )
     return _validation_result_to_schema(raw)
 
@@ -138,9 +140,11 @@ def create_outcome_endpoint(
     request: Request,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("reviewer")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     ev, meta = outcomes_service.create_outcome(
         db,
+        tenant_id=tenant_id,
         submission_id=body.submission_id,
         state=body.state,
         tax_category=body.tax_category,
@@ -172,6 +176,7 @@ def create_outcome_endpoint(
         background_tasks,
         "outcome.created",
         {
+            "tenant_id": tenant_id,
             "outcome_id": ev.id,
             "state": ev.state,
             "tax_category": ev.tax_category,
@@ -201,9 +206,11 @@ def list_outcomes_endpoint(
     coverage_status: str | None = None,
     limit: int = 100,
     db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     rows = outcomes_service.list_outcomes(
         db,
+        tenant_id=tenant_id,
         state=state,
         tax_category=tax_category,
         coverage_status=coverage_status,

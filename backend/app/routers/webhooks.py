@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..middleware.rbac import require_role
+from ..middleware.rbac import require_role, tenant_id_dep
 from ..services.webhook_delivery_service import resend_delivery_attempt
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
@@ -23,10 +23,11 @@ def register_webhook(
     request: Request,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("admin")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     signing_secret = secrets.token_hex(32)
     wh = models.WebhookSubscription(
-        tenant_id=body.tenant_id,
+        tenant_id=tenant_id,
         url=body.url,
         events=body.events,
         secret_hint=signing_secret[:8],
@@ -47,7 +48,7 @@ def register_webhook(
         detail={
             "url": wh.url,
             "events": list(wh.events or []),
-            "tenant_id": body.tenant_id,
+            "tenant_id": tenant_id,
         },
     )
     return schemas.WebhookRegisterResponse(
@@ -64,10 +65,12 @@ def register_webhook(
 def list_subscriptions(
     db: Session = Depends(get_db),
     active_only: bool = True,
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     q = db.query(models.WebhookSubscription).order_by(
         models.WebhookSubscription.created_at.desc()
     )
+    q = q.filter(models.WebhookSubscription.tenant_id == tenant_id)
     if active_only:
         q = q.filter(models.WebhookSubscription.active.is_(True))
     rows = q.all()
@@ -89,9 +92,16 @@ def list_deliveries(
     status: str | None = None,
     event_type: str | None = None,
     limit: int = Query(100, ge=1, le=500),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
-    q = db.query(models.WebhookDeliveryAttempt).order_by(
-        models.WebhookDeliveryAttempt.created_at.desc()
+    q = (
+        db.query(models.WebhookDeliveryAttempt)
+        .join(
+            models.WebhookSubscription,
+            models.WebhookSubscription.id == models.WebhookDeliveryAttempt.subscription_id,
+        )
+        .filter(models.WebhookSubscription.tenant_id == tenant_id)
+        .order_by(models.WebhookDeliveryAttempt.created_at.desc())
     )
     if status:
         q = q.filter(models.WebhookDeliveryAttempt.status == status)
@@ -125,9 +135,10 @@ def resend_delivery(
     delivery_id: str,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("admin")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     try:
-        attempt = resend_delivery_attempt(db, delivery_id=delivery_id)
+        attempt = resend_delivery_attempt(db, delivery_id=delivery_id, tenant_id=tenant_id)
     except LookupError:
         raise HTTPException(status_code=404, detail="Delivery not found")
     except ValueError as exc:
@@ -154,24 +165,41 @@ def resend_delivery(
 def webhook_health(
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("reviewer")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     now = datetime.utcnow()
     since = now - timedelta(hours=24)
-    total_subs = int(db.query(func.count(models.WebhookSubscription.id)).scalar() or 0)
+    total_subs = int(
+        db.query(func.count(models.WebhookSubscription.id))
+        .filter(models.WebhookSubscription.tenant_id == tenant_id)
+        .scalar()
+        or 0
+    )
     active_subs = int(
         db.query(func.count(models.WebhookSubscription.id))
+        .filter(models.WebhookSubscription.tenant_id == tenant_id)
         .filter(models.WebhookSubscription.active.is_(True))
         .scalar()
         or 0
     )
     deliveries_last_24h = int(
         db.query(func.count(models.WebhookDeliveryAttempt.id))
+        .join(
+            models.WebhookSubscription,
+            models.WebhookSubscription.id == models.WebhookDeliveryAttempt.subscription_id,
+        )
+        .filter(models.WebhookSubscription.tenant_id == tenant_id)
         .filter(models.WebhookDeliveryAttempt.created_at >= since)
         .scalar()
         or 0
     )
     success_last_24h = int(
         db.query(func.count(models.WebhookDeliveryAttempt.id))
+        .join(
+            models.WebhookSubscription,
+            models.WebhookSubscription.id == models.WebhookDeliveryAttempt.subscription_id,
+        )
+        .filter(models.WebhookSubscription.tenant_id == tenant_id)
         .filter(models.WebhookDeliveryAttempt.created_at >= since)
         .filter(models.WebhookDeliveryAttempt.status == "success")
         .scalar()
@@ -179,6 +207,11 @@ def webhook_health(
     )
     failed_last_24h = int(
         db.query(func.count(models.WebhookDeliveryAttempt.id))
+        .join(
+            models.WebhookSubscription,
+            models.WebhookSubscription.id == models.WebhookDeliveryAttempt.subscription_id,
+        )
+        .filter(models.WebhookSubscription.tenant_id == tenant_id)
         .filter(models.WebhookDeliveryAttempt.created_at >= since)
         .filter(models.WebhookDeliveryAttempt.status == "failed")
         .scalar()
@@ -196,6 +229,7 @@ def webhook_health(
             models.WebhookSubscription,
             models.WebhookSubscription.id == models.WebhookDeliveryAttempt.subscription_id,
         )
+        .filter(models.WebhookSubscription.tenant_id == tenant_id)
         .filter(models.WebhookDeliveryAttempt.created_at >= since)
         .filter(models.WebhookDeliveryAttempt.status == "failed")
         .order_by(models.WebhookDeliveryAttempt.created_at.desc())

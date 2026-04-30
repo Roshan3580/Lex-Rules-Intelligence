@@ -28,6 +28,7 @@ _ACTION_TO_STATUS = {
 def list_rules(
     db: Session,
     *,
+    tenant_id: str = "default",
     state: Optional[str] = None,
     tax_category: Optional[str] = None,
     review_status: Optional[str] = None,
@@ -35,7 +36,7 @@ def list_rules(
     needs_review_only: bool = False,
     limit: int = 200,
 ) -> list[models.Rule]:
-    q = db.query(models.Rule)
+    q = db.query(models.Rule).filter(models.Rule.tenant_id == tenant_id)
     if state:
         q = q.filter(models.Rule.state == state)
     if tax_category:
@@ -51,8 +52,13 @@ def list_rules(
     return q.order_by(models.Rule.created_at.desc()).limit(limit).all()
 
 
-def get_rule(db: Session, rule_id: str) -> Optional[models.Rule]:
-    return db.query(models.Rule).filter(models.Rule.id == rule_id).first()
+def get_rule(db: Session, rule_id: str, *, tenant_id: str = "default") -> Optional[models.Rule]:
+    return (
+        db.query(models.Rule)
+        .filter(models.Rule.tenant_id == tenant_id)
+        .filter(models.Rule.id == rule_id)
+        .first()
+    )
 
 
 def update_rule(
@@ -60,8 +66,9 @@ def update_rule(
     rule_id: str,
     payload: schemas.RuleUpdate,
     actor: Optional[str] = "admin",
+    tenant_id: str = "default",
 ) -> models.Rule:
-    rule = get_rule(db, rule_id)
+    rule = get_rule(db, rule_id, tenant_id=tenant_id)
     if rule is None:
         raise LookupError(f"Rule {rule_id} not found")
 
@@ -104,11 +111,12 @@ def review_action(
     action: str,
     actor: Optional[str] = "admin",
     notes: Optional[str] = None,
+    tenant_id: str = "default",
 ) -> models.Rule:
     if action not in _VALID_ACTIONS:
         raise ValueError(f"Unknown review action: {action}")
 
-    rule = get_rule(db, rule_id)
+    rule = get_rule(db, rule_id, tenant_id=tenant_id)
     if rule is None:
         raise LookupError(f"Rule {rule_id} not found")
 
@@ -144,7 +152,10 @@ def review_action(
     return rule
 
 
-def list_events(db: Session, rule_id: str) -> list[models.ReviewEvent]:
+def list_events(db: Session, rule_id: str, *, tenant_id: str = "default") -> list[models.ReviewEvent]:
+    # Ensure the rule exists in this tenant.
+    if get_rule(db, rule_id, tenant_id=tenant_id) is None:
+        return []
     return (
         db.query(models.ReviewEvent)
         .filter(models.ReviewEvent.rule_id == rule_id)
@@ -156,12 +167,14 @@ def list_events(db: Session, rule_id: str) -> list[models.ReviewEvent]:
 def list_all_events(
     db: Session,
     *,
+    tenant_id: str = "default",
     limit: int = 100,
 ) -> list[tuple[models.ReviewEvent, models.Rule]]:
     """Global review audit trail for Admin / dashboard (newest first)."""
     return (
         db.query(models.ReviewEvent, models.Rule)
         .join(models.Rule, models.ReviewEvent.rule_id == models.Rule.id)
+        .filter(models.Rule.tenant_id == tenant_id)
         .order_by(models.ReviewEvent.created_at.desc())
         .limit(min(max(limit, 1), 500))
         .all()

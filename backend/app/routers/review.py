@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
-from ..middleware.rbac import require_role
+from ..middleware.rbac import require_role, tenant_id_dep
 from ..services import review_service, validation
 from ..services.cache_service import invalidate_enforcement_caches
 
@@ -15,8 +15,10 @@ router = APIRouter(prefix="/api/review", tags=["review"])
 
 
 @router.get("/queue", response_model=list[schemas.RuleOut])
-def review_queue(db: Session = Depends(get_db)):
-    rules = review_service.list_rules(db, needs_review_only=True, limit=500)
+def review_queue(db: Session = Depends(get_db), tenant_id: str = Depends(tenant_id_dep)):
+    rules = review_service.list_rules(
+        db, tenant_id=tenant_id, needs_review_only=True, limit=500
+    )
     return [schemas.RuleOut.model_validate(r) for r in rules]
 
 
@@ -26,9 +28,10 @@ def edit_rule(
     payload: schemas.RuleUpdate,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("reviewer")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     try:
-        rule = review_service.update_rule(db, rule_id, payload)
+        rule = review_service.update_rule(db, rule_id, payload, tenant_id=tenant_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     invalidate_enforcement_caches()
@@ -43,14 +46,28 @@ def rule_action(
     request: Request,
     db: Session = Depends(get_db),
     _role: str = Depends(require_role("reviewer")),
+    tenant_id: str = Depends(tenant_id_dep),
 ):
     # Publish gate: validation + confidence + human approve (brief §8).
     if payload.action == "publish":
-        existing = review_service.get_rule(db, rule_id)
+        existing = review_service.get_rule(db, rule_id, tenant_id=tenant_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Rule not found")
         ok, blockers = validation.can_publish(existing)
         if not ok:
+            from ..config import settings
+            from ..services.governance_service import publish_diagnostics
+
+            rep = publish_diagnostics(existing)
+            if getattr(settings, "strict_publish_checks", False):
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": "publish_blocked",
+                        "blockers": [b.__dict__ for b in rep.blockers],
+                        "warnings": [w.__dict__ for w in rep.warnings],
+                    },
+                )
             raise HTTPException(
                 status_code=400,
                 detail={
@@ -66,6 +83,7 @@ def rule_action(
             action=payload.action,
             actor=payload.actor,
             notes=payload.notes,
+            tenant_id=tenant_id,
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
@@ -91,6 +109,7 @@ def rule_action(
             background_tasks,
             "rule.published",
             {
+                "tenant_id": tenant_id,
                 "rule_id": rule.id,
                 "rule_title": rule.rule_title,
                 "state": rule.state,
@@ -104,6 +123,10 @@ def rule_action(
 
 
 @router.get("/rules/{rule_id}/events", response_model=list[schemas.ReviewEventOut])
-def rule_events(rule_id: str, db: Session = Depends(get_db)):
-    events = review_service.list_events(db, rule_id)
+def rule_events(
+    rule_id: str,
+    db: Session = Depends(get_db),
+    tenant_id: str = Depends(tenant_id_dep),
+):
+    events = review_service.list_events(db, rule_id, tenant_id=tenant_id)
     return [schemas.ReviewEventOut.model_validate(e) for e in events]

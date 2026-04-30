@@ -57,17 +57,29 @@ def build_taxonomy() -> dict[str, Any]:
     }
 
 
-def admin_summary(db: Session) -> dict[str, Any]:
-    total_sources = db.query(func.count(models.Source.id)).scalar() or 0
-    total_rules = db.query(func.count(models.Rule.id)).scalar() or 0
+def admin_summary(db: Session, *, tenant_id: str = "default") -> dict[str, Any]:
+    total_sources = (
+        db.query(func.count(models.Source.id))
+        .filter(models.Source.tenant_id == tenant_id)
+        .scalar()
+        or 0
+    )
+    total_rules = (
+        db.query(func.count(models.Rule.id))
+        .filter(models.Rule.tenant_id == tenant_id)
+        .scalar()
+        or 0
+    )
     published_rules = (
         db.query(func.count(models.Rule.id))
+        .filter(models.Rule.tenant_id == tenant_id)
         .filter(models.Rule.review_status == "published")
         .scalar()
         or 0
     )
     rules_in_review = (
         db.query(func.count(models.Rule.id))
+        .filter(models.Rule.tenant_id == tenant_id)
         .filter(
             models.Rule.review_status.in_(
                 ["draft", "needs_review", "auto_validated"]
@@ -78,17 +90,21 @@ def admin_summary(db: Session) -> dict[str, Any]:
     )
     failed_sources = (
         db.query(func.count(models.Source.id))
+        .filter(models.Source.tenant_id == tenant_id)
         .filter(models.Source.status == "failed")
         .scalar()
         or 0
     )
     avg_confidence = (
-        db.query(func.avg(models.Rule.confidence_score)).scalar()
+        db.query(func.avg(models.Rule.confidence_score))
+        .filter(models.Rule.tenant_id == tenant_id)
+        .scalar()
     )
     if avg_confidence is None:
         avg_confidence = 0.0
     extraction_rows = (
         db.query(models.Rule.extraction_method, func.count(models.Rule.id))
+        .filter(models.Rule.tenant_id == tenant_id)
         .group_by(models.Rule.extraction_method)
         .all()
     )

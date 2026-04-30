@@ -300,6 +300,7 @@ def _persist_llm_rule(
     confidence_raw = max(0.0, min(confidence_raw, 1.0))
 
     payload = {
+        "tenant_id": source.tenant_id,
         "state": rule_dict.get("state") or source.state or "Unknown",
         "tax_category": rule_dict.get("tax_category") or source.tax_category or "other",
         "rule_category": (rule_dict.get("rule_category") or "").strip() or None,
@@ -337,6 +338,7 @@ def _persist_llm_rule(
         return None
 
     rule = models.Rule(
+        tenant_id=source.tenant_id,
         state=payload["state"],
         tax_category=payload["tax_category"],
         rule_category=payload["rule_category"],
@@ -455,6 +457,7 @@ def _extract_with_heuristics(
         rule_category = _infer_rule_category(lowered)
 
         payload = {
+            "tenant_id": source.tenant_id,
             "state": state_default,
             "tax_category": category,
             "rule_category": rule_category,
@@ -477,6 +480,7 @@ def _extract_with_heuristics(
             continue
 
         rule = models.Rule(
+            tenant_id=source.tenant_id,
             state=state_default,
             tax_category=category,
             rule_category=rule_category,

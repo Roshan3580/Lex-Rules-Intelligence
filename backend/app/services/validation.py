@@ -294,6 +294,7 @@ def can_publish(rule: models.Rule) -> tuple[bool, list[str]]:
 
 def _rule_to_payload(rule: models.Rule) -> dict[str, Any]:
     return {
+        "tenant_id": rule.tenant_id,
         "state": rule.state,
         "tax_category": rule.tax_category,
         "rule_title": rule.rule_title,
@@ -321,6 +322,7 @@ def _rule_to_payload(rule: models.Rule) -> dict[str, Any]:
 def find_duplicate_rule(
     db: Session,
     *,
+    tenant_id: str = "default",
     state: str,
     tax_category: str,
     rule_title: str,
@@ -334,6 +336,7 @@ def find_duplicate_rule(
         return None
     q = (
         db.query(models.Rule)
+        .filter(models.Rule.tenant_id == tenant_id)
         .filter(models.Rule.state == state)
         .filter(models.Rule.tax_category == tax_category)
     )
@@ -363,8 +366,10 @@ def find_conflicting_rules(
     if not (state and category):
         return []
 
+    tenant_id = str(candidate.get("tenant_id") or "default")
     q = (
         db.query(models.Rule)
+        .filter(models.Rule.tenant_id == tenant_id)
         .filter(models.Rule.state == state)
         .filter(models.Rule.tax_category == category)
     )
@@ -404,8 +409,10 @@ def assess_candidate(
     """One-stop validate+dedup+conflict check for a candidate rule."""
     res = validate_rule_payload(payload, raw_confidence=raw_confidence)
     report = ConflictReport()
+    tenant_id = str(payload.get("tenant_id") or "default")
     dup = find_duplicate_rule(
         db,
+        tenant_id=tenant_id,
         state=payload.get("state") or "",
         tax_category=payload.get("tax_category") or "",
         rule_title=payload.get("rule_title") or "",
