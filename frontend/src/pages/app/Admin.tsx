@@ -302,8 +302,8 @@ const Admin = () => {
     <div className="p-6 lg:p-8 space-y-6 max-w-[1400px]">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-widest text-muted-foreground">Workspace settings</p>
-          <h1 className="text-3xl font-bold tracking-tight mt-1">Admin</h1>
+          <p className="app-label">Workspace settings</p>
+          <h1 className="font-serif text-3xl leading-tight tracking-tight mt-1">Admin</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Source onboarding, taxonomy reference, publishing controls, and review audit from the live backend.
           </p>

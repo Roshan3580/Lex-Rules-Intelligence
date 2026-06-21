@@ -1,16 +1,19 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
 import { AppTopbar } from "./AppTopbar";
 import { DemoModeBanner } from "@/components/DemoModeBanner";
 
 export function AppLayout() {
+  const location = useLocation();
+  const hideDemoBanner = location.pathname.startsWith("/app/review");
+
   return (
-    <div className="min-h-screen flex w-full bg-background">
+    <div className="app-shell min-h-screen flex w-full">
       <AppSidebar />
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex min-w-0 flex-1 flex-col">
         <AppTopbar />
-        <DemoModeBanner />
-        <main className="flex-1 overflow-y-auto">
+        {!hideDemoBanner && <DemoModeBanner />}
+        <main className="app-grid-bg relative flex-1 overflow-y-auto">
           <div className="animate-fade-in">
             <Outlet />
           </div>

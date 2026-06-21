@@ -84,8 +84,8 @@ export default function AuditTrail() {
   if (roleBlocked) {
     return (
       <div className="p-6 lg:p-8 max-w-[960px]">
-        <p className="text-xs uppercase tracking-widest text-muted-foreground">Governance</p>
-        <h1 className="text-3xl font-bold tracking-tight mt-1 flex items-center gap-2">
+        <p className="app-label">Governance</p>
+        <h1 className="font-serif text-3xl leading-tight tracking-tight mt-1 flex items-center gap-2">
           <ScrollText className="h-7 w-7 text-muted-foreground" />
           Audit Trail
         </h1>
@@ -100,8 +100,8 @@ export default function AuditTrail() {
     <div className="p-6 lg:p-8 space-y-6 max-w-[1400px]">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-widest text-muted-foreground">Governance</p>
-          <h1 className="text-3xl font-bold tracking-tight mt-1 flex items-center gap-2">
+          <p className="app-label">Governance</p>
+          <h1 className="font-serif text-3xl leading-tight tracking-tight mt-1 flex items-center gap-2">
             <ScrollText className="h-7 w-7 text-primary" />
             Audit Trail
           </h1>

@@ -62,7 +62,7 @@ export default function WorkflowRunner() {
   return (
     <div className="p-6 lg:p-8 max-w-4xl mx-auto space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+        <h1 className="font-serif text-2xl leading-tight tracking-tight flex items-center gap-2">
           <GitBranch className="h-6 w-6" />
           Workflow runner
         </h1>

@@ -36,7 +36,7 @@ from .routers import (
     workflows,
 )
 from .schemas import HealthOut
-from .seed import ensure_demo_enforcement_rules, seed_if_empty
+from .seed import ensure_demo_enforcement_rules, ensure_demo_review_queue_rules, seed_if_empty
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -111,7 +111,13 @@ def create_app() -> FastAPI:
                         "DEMO_MODE: ensured %d Submission Validator enforcement demo rule(s)",
                         ensured,
                     )
-                if inserted or ensured:
+                review_ensured = ensure_demo_review_queue_rules(db)
+                if review_ensured:
+                    logger.info(
+                        "DEMO_MODE: ensured %d Review Queue demo rule(s)",
+                        review_ensured,
+                    )
+                if inserted or ensured or review_ensured:
                     from .services.cache_service import invalidate_enforcement_caches
 
                     invalidate_enforcement_caches()

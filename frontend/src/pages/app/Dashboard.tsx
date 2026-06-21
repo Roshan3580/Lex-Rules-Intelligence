@@ -15,6 +15,12 @@ import {
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { AppPage } from "@/components/app/AppPage";
+import { AppSectionHeader } from "@/components/app/AppSectionHeader";
+import { AppCard, AppCardHeader } from "@/components/app/AppCard";
+import { MetricCard, MetricCardSkeleton } from "@/components/app/MetricCard";
+import { EmptyState } from "@/components/app/EmptyState";
+import { StatusBadge } from "@/components/app/StatusBadge";
 import { Confidence } from "@/components/Confidence";
 import {
   api,
@@ -36,19 +42,19 @@ function timeAgo(iso: string): string {
 function activityIcon(kind: string) {
   switch (kind) {
     case "extracted":
-      return { Icon: Sparkles, className: "bg-primary/15 text-primary" };
+      return { Icon: Sparkles, className: "border-primary/20 bg-primary/5 text-primary" };
     case "source_updated":
-      return { Icon: GitPullRequest, className: "bg-teal/15 text-teal" };
+      return { Icon: GitPullRequest, className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
     case "ingestion_run":
-      return { Icon: Database, className: "bg-secondary text-muted-foreground" };
+      return { Icon: Database, className: "border-border bg-secondary text-muted-foreground" };
     case "approved":
-      return { Icon: CheckCircle2, className: "bg-success/15 text-success" };
+      return { Icon: CheckCircle2, className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
     case "flagged":
-      return { Icon: AlertTriangle, className: "bg-warning/15 text-warning" };
+      return { Icon: AlertTriangle, className: "border-amber-200 bg-amber-50 text-amber-700" };
     case "updated":
-      return { Icon: GitPullRequest, className: "bg-primary/10 text-primary" };
+      return { Icon: GitPullRequest, className: "border-primary/20 bg-primary/5 text-primary" };
     default:
-      return { Icon: Clock, className: "bg-secondary text-muted-foreground" };
+      return { Icon: Clock, className: "border-border bg-secondary text-muted-foreground" };
   }
 }
 
@@ -116,15 +122,15 @@ const Dashboard = () => {
     : [];
 
   return (
-    <div className="p-6 lg:p-8 space-y-6 max-w-[1600px]">
-      <div className="flex items-end justify-between flex-wrap gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-widest text-muted-foreground">Overview</p>
-          <h1 className="text-3xl font-bold tracking-tight mt-1">State Tax Rules Intelligence</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+    <AppPage>
+      <AppSectionHeader
+        label="Overview"
+        title="State Tax Rules Intelligence"
+        description={
+          <>
             Source-grounded answers across all 50 U.S. states.
             {health && (
-              <span className="ml-2">
+              <span className="mt-1 block">
                 Backend: <span className="font-medium text-foreground">{health.status}</span>
                 {" · "}
                 LLM:{" "}
@@ -134,41 +140,46 @@ const Dashboard = () => {
                 {health.demo_mode ? (
                   <>
                     {" · "}
-                    <span className="text-warning font-medium">Demo seed on</span>
+                    <StatusBadge tone="warning">Demo seed on</StatusBadge>
                   </>
                 ) : null}
+                {kpis && (
+                  <>
+                    {" · "}
+                    Embeddings: <span className="font-mono">{kpis.embedding_provider}</span>
+                  </>
+                )}
               </span>
             )}
-            {kpis && (
-              <span className="ml-2 block sm:inline mt-1 sm:mt-0 text-xs">
-                Embeddings: <span className="font-mono">{kpis.embedding_provider}</span>
-              </span>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            disabled={monitorBusy || loading}
-            onClick={() => void onMonitorRun()}
-            title="Re-fetch URL sources and refresh metrics"
-          >
-            {monitorBusy ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
-            <span className="ml-1.5 hidden sm:inline">Check sources</span>
-          </Button>
-          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Clock className="h-3.5 w-3.5" />}
-          <span>{loading ? "Loading…" : "Live"}</span>
-        </div>
-      </div>
+          </>
+        }
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              disabled={monitorBusy || loading}
+              onClick={() => void onMonitorRun()}
+              title="Re-fetch URL sources and refresh metrics"
+            >
+              {monitorBusy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              <span className="ml-1.5 hidden sm:inline">Check sources</span>
+            </Button>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Clock className="h-3.5 w-3.5" />}
+              <span>{loading ? "Loading…" : "Live"}</span>
+            </div>
+          </>
+        }
+      />
 
       {error && (
-        <div className="rounded-xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+        <div className="border border-destructive/30 bg-red-50 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -182,68 +193,62 @@ const Dashboard = () => {
         </p>
       )}
 
-      {/* KPI grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {(loading && !kpis
-          ? Array.from({ length: 8 }).map((_, i) => (
-              <div
-                key={i}
-                className="rounded-2xl glass p-5 animate-pulse h-28 bg-secondary/30"
-              />
-            ))
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {loading && !kpis
+          ? Array.from({ length: 8 }).map((_, i) => <MetricCardSkeleton key={i} />)
           : kpiCards.map((k) => (
-              <div
-                key={k.label}
-                className="group relative rounded-2xl glass p-5 hover:border-primary/30 transition-all"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="h-8 w-8 rounded-lg bg-secondary border border-border flex items-center justify-center">
-                    <k.icon className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </div>
-                <p className="mt-4 text-2xl sm:text-3xl font-bold tracking-tight">{k.value}</p>
-                <p className="text-xs text-muted-foreground mt-1">{k.label}</p>
-              </div>
-            )))}
+              <MetricCard key={k.label} label={k.label} value={k.value} icon={k.icon} />
+            ))}
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Activity feed */}
-        <div className="lg:col-span-2 rounded-2xl glass p-6">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-base font-semibold">Activity feed</h2>
-              <p className="text-xs text-muted-foreground">
-                Ingestion runs, extractions, source updates, and review actions
-              </p>
-            </div>
-            <Link to="/app/sources" className="text-xs text-primary hover:underline">
-              Sources
-            </Link>
-          </div>
+      {!loading && kpis && kpis.total_rules === 0 && (
+        <AppCard padding="lg">
+          <EmptyState
+            title="No rules indexed yet"
+            description="Add sources or run the seed batch to populate the intelligence layer."
+            action={
+              <Button asChild variant="outline" size="sm">
+                <Link to="/app/sources">Open sources</Link>
+              </Button>
+            }
+          />
+        </AppCard>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <AppCard padding="lg" className="lg:col-span-2">
+          <AppCardHeader
+            title="Activity feed"
+            description="Ingestion runs, extractions, source updates, and review actions"
+            action={
+              <Link to="/app/sources" className="text-xs text-primary hover:underline">
+                Sources
+              </Link>
+            }
+          />
           <div className="space-y-1">
             {!loading && activities.length === 0 && (
-              <p className="text-sm text-muted-foreground py-6">
-                No activity yet. Ingest a URL or PDF from Sources, or run the YAML seed batch.
-              </p>
+              <EmptyState description="No activity yet. Ingest a URL or PDF from Sources, or run the YAML seed batch." />
             )}
             {activities.map((a) => {
               const { Icon, className } = activityIcon(a.kind);
               return (
                 <div
                   key={a.id}
-                  className="flex items-start gap-3 py-3 border-b border-border/40 last:border-0"
+                  className="flex items-start gap-3 border-b border-border py-3 last:border-0"
                 >
-                  <div className={`mt-0.5 h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${className}`}>
+                  <div
+                    className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center border ${className}`}
+                  >
                     <Icon className="h-3.5 w-3.5" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground leading-snug">{a.title}</p>
-                    <p className="text-sm text-muted-foreground leading-snug mt-0.5 line-clamp-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium leading-snug text-foreground">{a.title}</p>
+                    <p className="mt-0.5 line-clamp-2 text-sm leading-snug text-muted-foreground">
                       {a.detail}
                     </p>
-                    <div className="flex flex-wrap items-center gap-2 mt-1">
-                      <span className="text-[11px] text-muted-foreground font-mono truncate max-w-[200px]">
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span className="max-w-[200px] truncate font-mono text-[11px] text-muted-foreground">
                         {a.context}
                       </span>
                       <span className="text-[11px] text-muted-foreground">·</span>
@@ -260,57 +265,51 @@ const Dashboard = () => {
               );
             })}
           </div>
-        </div>
+        </AppCard>
 
-        {/* Alerts */}
-        <div className="rounded-2xl glass p-6">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-base font-semibold">Change alerts</h2>
-              <p className="text-xs text-muted-foreground">From live sources & rule quality checks</p>
-            </div>
-            {alerts.length > 0 && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-warning/15 text-warning">
-                {alerts.length} open
-              </span>
-            )}
-          </div>
+        <AppCard padding="lg">
+          <AppCardHeader
+            title="Change alerts"
+            description="From live sources and rule quality checks"
+            action={
+              alerts.length > 0 ? (
+                <StatusBadge tone="warning">{alerts.length} open</StatusBadge>
+              ) : undefined
+            }
+          />
           <div className="space-y-3">
             {!loading && alerts.length === 0 && (
-              <p className="text-sm text-muted-foreground">No alerts — or nothing to flag yet.</p>
+              <EmptyState description="No alerts — or nothing to flag yet." />
             )}
             {alerts.map((alertItem) => (
               <div
                 key={alertItem.id}
-                className="rounded-xl border border-border/60 bg-secondary/30 p-3 hover:border-primary/30 transition-colors"
+                className="border border-border bg-secondary/40 p-3 transition-colors hover:border-primary/30"
               >
                 <div className="flex items-start gap-2">
                   <span
-                    className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 ${
+                    className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
                       alertItem.severity === "error"
                         ? "bg-destructive"
                         : alertItem.severity === "warning"
-                          ? "bg-warning"
+                          ? "bg-amber-500"
                           : "bg-primary"
                     }`}
                   />
                   <div>
                     <p className="text-sm font-medium leading-snug">{alertItem.title}</p>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{alertItem.body}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{alertItem.body}</p>
                   </div>
                 </div>
               </div>
             ))}
           </div>
-          <Link
-            to="/app/review"
-            className="mt-4 inline-block text-xs text-primary hover:underline"
-          >
+          <Link to="/app/review" className="mt-4 inline-block text-xs text-primary hover:underline">
             Open review queue →
           </Link>
-        </div>
+        </AppCard>
       </div>
-    </div>
+    </AppPage>
   );
 };
 

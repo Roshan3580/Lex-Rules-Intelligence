@@ -11,6 +11,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Confidence } from "@/components/Confidence";
+import { AppSectionHeader } from "@/components/app/AppSectionHeader";
 import { Button } from "@/components/ui/button";
 import {
   api,
@@ -121,23 +122,19 @@ const RuleSearch = () => {
     <div className="flex h-[calc(100vh-4rem)]">
       {/* Main */}
       <div className="flex-1 overflow-y-auto p-6 lg:p-8 max-w-[1100px]">
-        <div className="mb-6">
-          <p className="text-xs uppercase tracking-widest text-primary mb-2 flex items-center gap-1.5">
-            <Sparkles className="h-3 w-3" /> State tax copilot
-          </p>
-          <h1 className="text-3xl font-bold tracking-tight">Rule search</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Ask a state tax question. Answers are grounded in indexed sources
-            with citations and a confidence score.
-          </p>
-        </div>
+        <AppSectionHeader
+          className="mb-6"
+          label="Rule intelligence"
+          title="Rule search"
+          description="Ask a state tax question. Answers are grounded in indexed sources with citations and a confidence score."
+        />
 
-        {/* AI Input */}
+        {/* Query */}
         <form onSubmit={handleSubmit}>
-          <div className="relative rounded-2xl gradient-border shadow-elegant">
+          <div className="relative border border-border bg-card">
             <div className="flex items-start gap-3 p-5">
-              <div className="h-9 w-9 rounded-xl bg-gradient-primary flex items-center justify-center shrink-0 shadow-glow">
-                <Sparkles className="h-4 w-4 text-primary-foreground" />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-primary/20 bg-primary/5">
+                <Sparkles className="h-4 w-4 text-primary" />
               </div>
               <textarea
                 value={query}
@@ -426,7 +423,7 @@ const RuleSearch = () => {
 
       {/* Side panel */}
       {result && !loading && (rules.length > 0 || sources.length > 0) && (
-        <aside className="hidden xl:flex w-[420px] shrink-0 border-l border-border bg-sidebar/40 flex-col overflow-y-auto">
+        <aside className="hidden xl:flex w-[420px] shrink-0 flex-col overflow-y-auto border-l border-border bg-card">
           <div className="p-6 border-b border-border">
             <p className="text-[10px] uppercase tracking-widest text-primary mb-1 flex items-center gap-1">
               <Sparkles className="h-3 w-3" /> Why this answer?

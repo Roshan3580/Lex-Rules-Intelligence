@@ -174,10 +174,10 @@ const Workflows = () => {
     <div className="p-6 lg:p-8 space-y-6 max-w-[1400px]">
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <p className="text-xs uppercase tracking-widest text-muted-foreground">
+          <p className="app-label">
             Workflow guidance
           </p>
-          <h1 className="text-3xl font-bold tracking-tight mt-1">
+          <h1 className="font-serif text-3xl leading-tight tracking-tight mt-1">
             Tax filing workflows
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

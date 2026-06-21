@@ -135,4 +135,118 @@
   .glow {
     box-shadow: var(--shadow-glow);
   }
+
+  /* Landing page — scoped light editorial theme (does not affect /app) */
+  .landing-page {
+    --landing-bg: 40 20% 97%;
+    --landing-fg: 0 0% 8%;
+    --landing-muted: 0 0% 42%;
+    --landing-border: 0 0% 86%;
+    --landing-accent: 245 58% 48%;
+    --landing-nav: 0 0% 6%;
+    color: hsl(var(--landing-fg));
+    background-color: hsl(var(--landing-bg));
+  }
+
+  .landing-grid-bg {
+    background-image:
+      linear-gradient(hsl(var(--landing-border)) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--landing-border)) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+
+  .landing-label {
+    @apply text-[10px] font-medium uppercase tracking-[0.18em] text-[hsl(var(--landing-muted))];
+  }
+
+  .landing-card {
+    @apply border border-[hsl(var(--landing-border))] bg-white;
+  }
+
+  /* App shell — light editorial console (matches landing page) */
+  .app-shell {
+    --background: 40 20% 97%;
+    --foreground: 0 0% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 8%;
+    --primary: 245 58% 48%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 265 50% 52%;
+    --secondary: 40 15% 94%;
+    --secondary-foreground: 0 0% 8%;
+    --muted: 40 12% 92%;
+    --muted-foreground: 0 0% 42%;
+    --accent: 265 50% 52%;
+    --accent-foreground: 0 0% 100%;
+    --border: 0 0% 86%;
+    --input: 0 0% 92%;
+    --ring: 245 58% 48%;
+    --radius: 0.25rem;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 38%;
+    --sidebar-primary: 245 58% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 40 20% 96%;
+    --sidebar-accent-foreground: 0 0% 8%;
+    --sidebar-border: 0 0% 88%;
+    --sidebar-ring: 245 58% 48%;
+    --gradient-primary: linear-gradient(135deg, hsl(245 58% 48%) 0%, hsl(265 50% 52%) 100%);
+    --shadow-glow: none;
+    --shadow-card: none;
+    --shadow-elegant: 0 1px 2px hsl(0 0% 0% / 0.04);
+    color: hsl(var(--foreground));
+    background-color: hsl(var(--background));
+  }
+
+  .app-shell .app-grid-bg {
+    background-image:
+      linear-gradient(hsl(var(--border)) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border)) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+
+  .app-shell .app-label {
+    @apply text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground;
+  }
+
+  .app-shell .app-card {
+    @apply border border-border bg-card;
+  }
+
+  .app-shell .glass,
+  .app-shell .glass-strong {
+    background: hsl(var(--card));
+    backdrop-filter: none;
+    border: 1px solid hsl(var(--border));
+    box-shadow: none;
+  }
+
+  .app-shell .gradient-border::before {
+    display: none;
+  }
+
+  .app-shell .gradient-border {
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    box-shadow: none;
+  }
+
+  .app-shell .gradient-text {
+    background: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
+    color: hsl(var(--foreground));
+  }
+
+  .app-shell .rounded-2xl,
+  .app-shell .rounded-xl {
+    border-radius: var(--radius);
+  }
+
+  .app-shell .shadow-glow,
+  .app-shell .shadow-elegant {
+    box-shadow: none;
+  }
 }

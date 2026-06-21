@@ -149,6 +149,125 @@ _CA_ENFORCEMENT_DEMO_RULE_TITLES = (
     "CA Sales Tax — LLC / high-amount Schedule R (demo)",
 )
 
+_REVIEW_QUEUE_DEMO_RULE_TITLES = (
+    "California use tax — occasional sale exemption (needs review)",
+    "Texas sales tax — marketplace facilitator registration (auto-validated)",
+    "New York ST-100 — part-quarterly filing threshold (draft)",
+)
+
+
+def _resolve_state_source(db: Session, state: str) -> models.Source | None:
+    spec = next((x for x in SEED_SOURCES if x["state"] == state), None)
+    if spec is None:
+        return None
+    hit = db.query(models.Source).filter(models.Source.url == spec["url"]).first()
+    if hit is not None:
+        return hit
+    return (
+        db.query(models.Source)
+        .filter(models.Source.state == state)
+        .order_by(models.Source.created_at.asc())
+        .first()
+    )
+
+
+def _review_queue_demo_rules(
+    ca: models.Source, tx: models.Source, ny: models.Source
+) -> list[models.Rule]:
+    """Illustrative extracted rules awaiting human review (demo only)."""
+    return [
+        models.Rule(
+            state="California",
+            tax_category="sales_tax",
+            rule_title=_REVIEW_QUEUE_DEMO_RULE_TITLES[0],
+            rule_summary=(
+                "Extracted rule: purchasers may owe use tax on occasional sales "
+                "when sales tax was not collected — confidence below publish threshold."
+            ),
+            detailed_rule=(
+                "Illustrative extraction pending review. Verify exemption thresholds "
+                "and required documentation against the source bulletin before approving."
+            ),
+            conditions=["Occasional or casual sale without collected sales tax"],
+            required_actions=["Assess use tax liability", "Retain purchase records"],
+            required_forms=[],
+            deadlines=[],
+            exceptions=["Specific occasional-sale exemptions may apply"],
+            source_id=ca.id,
+            source_url=ca.url,
+            source_document_name=ca.name,
+            source_snippet=(
+                "Use tax is owed by purchasers when sales tax has not been collected..."
+            ),
+            effective_date="2024-01-01",
+            confidence_score=0.58,
+            review_status="needs_review",
+            extraction_method="seed",
+        ),
+        models.Rule(
+            state="Texas",
+            tax_category="sales_tax",
+            rule_title=_REVIEW_QUEUE_DEMO_RULE_TITLES[1],
+            rule_summary=(
+                "Extracted rule: marketplace facilitators must collect Texas sales "
+                "tax when facilitating third-party sales — auto-validated pending publish."
+            ),
+            detailed_rule=(
+                "Illustrative auto-validated extraction. Confirm facilitator registration "
+                "requirements and filing cadence with the Comptroller bulletin."
+            ),
+            conditions=["Acting as marketplace facilitator for Texas sales"],
+            required_actions=[
+                "Register as marketplace facilitator",
+                "Collect and remit applicable sales tax",
+            ],
+            required_forms=["Form 01-114 (Sales and Use Tax Return)"],
+            deadlines=["20th of month following reporting period (monthly filers)"],
+            exceptions=None,
+            source_id=tx.id,
+            source_url=tx.url,
+            source_document_name=tx.name,
+            source_snippet=(
+                "Sellers must obtain a sales and use tax permit from the Texas "
+                "Comptroller before doing business..."
+            ),
+            effective_date="2024-01-01",
+            confidence_score=0.74,
+            review_status="auto_validated",
+            extraction_method="seed",
+        ),
+        models.Rule(
+            state="New York",
+            tax_category="sales_tax",
+            rule_title=_REVIEW_QUEUE_DEMO_RULE_TITLES[2],
+            rule_summary=(
+                "Draft extraction: vendors above part-quarterly thresholds must file "
+                "ST-100 on a monthly cadence — awaiting reviewer edit."
+            ),
+            detailed_rule=(
+                "Illustrative draft rule from pasted bulletin text. Review filing "
+                "frequency thresholds and form references before approval."
+            ),
+            conditions=["Taxable sales volume triggers part-quarterly (monthly) filing"],
+            required_actions=["File Form ST-100 on assigned cadence"],
+            required_forms=["Form ST-100"],
+            deadlines=["20th of month after each NY sales tax quarter end"],
+            exceptions=["Annual filing for lower-volume vendors"],
+            source_id=ny.id,
+            source_url=ny.url,
+            source_document_name=ny.name,
+            source_snippet=(
+                "Sales tax returns are filed quarterly (Form ST-100), annually, "
+                "or on a part-quarterly (monthly) basis depending on the "
+                "vendor's taxable sales volume."
+            ),
+            effective_date="2024-01-01",
+            confidence_score=0.52,
+            review_status="draft",
+            extraction_method="seed",
+        ),
+    ]
+
 
 def _ca_enforcement_demo_rules(source: models.Source) -> list[models.Rule]:
     """submission-stage demos for risky CA preset (documents + conditional Schedule R)."""
@@ -621,6 +740,33 @@ def _resolve_ca_demo_source(db: Session) -> models.Source:
     db.add(src)
     db.flush()
     return src
+
+
+def ensure_demo_review_queue_rules(db: Session) -> int:
+    """Ensure human-review demo rows exist for the Review Queue UI."""
+    have = (
+        db.query(models.Rule.rule_title)
+        .filter(models.Rule.rule_title.in_(_REVIEW_QUEUE_DEMO_RULE_TITLES))
+        .all()
+    )
+    have_set = {r[0] for r in have}
+    missing_titles = [t for t in _REVIEW_QUEUE_DEMO_RULE_TITLES if t not in have_set]
+    if not missing_titles:
+        return 0
+
+    ca = _resolve_state_source(db, "California")
+    tx = _resolve_state_source(db, "Texas")
+    ny = _resolve_state_source(db, "New York")
+    if not ca or not tx or not ny:
+        return 0
+
+    by_title = {r.rule_title: r for r in _review_queue_demo_rules(ca, tx, ny)}
+    added = 0
+    for title in missing_titles:
+        db.add(by_title[title])
+        added += 1
+    db.commit()
+    return added
 
 
 def ensure_demo_enforcement_rules(db: Session) -> int:

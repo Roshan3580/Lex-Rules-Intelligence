@@ -105,7 +105,7 @@ export default function SubmissionValidator() {
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Submission Validator</h1>
+        <h1 className="font-serif text-2xl leading-tight tracking-tight">Submission Validator</h1>
         <p className="text-muted-foreground text-sm mt-1">
           Deterministic pre-submission check against published and approved rules — no LLM on this path.
         </p>

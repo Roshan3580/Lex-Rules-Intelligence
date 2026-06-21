@@ -120,13 +120,11 @@ const ReviewQueue = () => {
     <div className="flex h-[calc(100vh-4rem)]">
       {/* List */}
       <div className="w-full lg:w-[460px] shrink-0 border-r border-border overflow-y-auto">
-        <div className="p-5 border-b border-border sticky top-0 bg-background/80 backdrop-blur-xl z-10">
+        <div className="sticky top-0 z-10 border-b border-border bg-card p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">
-                Human-in-the-loop
-              </p>
-              <h1 className="text-2xl font-bold tracking-tight mt-1">
+              <p className="app-label">Human-in-the-loop</p>
+              <h1 className="mt-1 font-serif text-2xl leading-tight tracking-tight">
                 Review queue
               </h1>
             </div>

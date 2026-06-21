@@ -111,7 +111,7 @@ export default function Outcomes() {
     <div className="p-6 lg:p-8 max-w-6xl mx-auto space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Outcomes & coverage</h1>
+          <h1 className="font-serif text-2xl leading-tight tracking-tight">Outcomes & coverage</h1>
           <p className="text-muted-foreground text-sm mt-1">
             Log rejections and compare them to deterministic validation —{" "}
             <code className="text-xs">POST /api/outcomes</code>,{" "}

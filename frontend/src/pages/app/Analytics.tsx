@@ -109,8 +109,8 @@ const Analytics = () => {
     <div className="p-6 lg:p-8 space-y-6 max-w-[1600px]">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-widest text-muted-foreground">Insights</p>
-          <h1 className="text-3xl font-bold tracking-tight mt-1">Analytics</h1>
+          <p className="app-label">Insights</p>
+          <h1 className="font-serif text-3xl leading-tight tracking-tight mt-1">Analytics</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Operational metrics from indexed sources and rules (no mock samples).
           </p>

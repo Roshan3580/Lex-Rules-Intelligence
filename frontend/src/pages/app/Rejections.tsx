@@ -38,7 +38,7 @@ export default function Rejections() {
     <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-8">
       <div className="flex flex-wrap justify-between gap-4 items-start">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+          <h1 className="font-serif text-2xl leading-tight tracking-tight flex items-center gap-2">
             <TriangleAlert className="h-6 w-6" />
             Rejection patterns
           </h1>
