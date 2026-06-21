@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/BrandLogo";
 import {
-  Sparkles,
   ArrowRight,
   FileText,
   Search,
@@ -12,6 +12,7 @@ import {
   GitBranch,
   Database,
   Activity,
+  Sparkles,
 } from "lucide-react";
 
 const Landing = () => {
@@ -21,9 +22,7 @@ const Landing = () => {
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/40 bg-background/70 backdrop-blur-xl">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-gradient-primary flex items-center justify-center shadow-glow">
-              <Sparkles className="h-4 w-4 text-primary-foreground" />
-            </div>
+            <BrandLogo />
             <span className="font-semibold tracking-tight">Lex</span>
             <span className="hidden sm:inline text-[10px] uppercase tracking-widest text-muted-foreground border border-border rounded px-1.5 py-0.5">
               Intelligence
@@ -279,9 +278,7 @@ const Landing = () => {
       <footer className="border-t border-border/40 py-10">
         <div className="container mx-auto px-6 flex items-center justify-center sm:justify-start">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <div className="h-6 w-6 rounded bg-gradient-primary flex items-center justify-center">
-              <Sparkles className="h-3 w-3 text-primary-foreground" />
-            </div>
+            <BrandLogo size="sm" />
             <span>© 2026 Lex Intelligence, Inc.</span>
           </div>
         </div>

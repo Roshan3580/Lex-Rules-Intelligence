@@ -7,7 +7,6 @@ import {
   CheckSquare,
   BarChart3,
   Shield,
-  Sparkles,
   Settings,
   ClipboardCheck,
   Inbox,
@@ -19,6 +18,7 @@ import {
   ScrollText,
   Webhook,
 } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -48,13 +48,7 @@ export function AppSidebar() {
   return (
     <aside className="hidden lg:flex w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar/80 backdrop-blur-xl">
       <div className="h-16 flex items-center gap-2.5 px-5 border-b border-sidebar-border">
-        <div className="h-8 w-8 rounded-lg bg-gradient-primary flex items-center justify-center shadow-glow">
-          <Sparkles className="h-4 w-4 text-primary-foreground" />
-        </div>
-        <div className="flex flex-col leading-none">
-          <span className="text-sm font-semibold text-foreground">Lex</span>
-          <span className="text-[10px] text-muted-foreground tracking-wider uppercase">Intelligence</span>
-        </div>
+        <BrandLogo showWordmark />
       </div>
 
       <nav className="flex-1 px-3 py-5 space-y-0.5 overflow-y-auto">

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="lex-gradient" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4F6BF6"/>
+      <stop offset="100%" stop-color="#9B6BF0"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#lex-gradient)"/>
+  <g transform="translate(8 8)" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M8 12.5A1.5 1.5 0 0 0 6.5 11L1.9 9.6a.375.375 0 0 1 0-.72L6.5 7.5A1.5 1.5 0 0 0 8 6l1.4-4.6a.375.375 0 0 1 .72 0L11.5 6a1.5 1.5 0 0 0 1.5 1.5l4.6 1.4a.375.375 0 0 1 0 .72L13 11a1.5 1.5 0 0 0-1.5 1.5L10.1 17.1a.375.375 0 0 1-.72 0L8 12.5z"/>
+    <path d="M14 2v2"/>
+    <path d="M15 3h-2"/>
+    <path d="M2 14v1"/>
+    <path d="M2.5 14.5H1.5"/>
+  </g>
+</svg>

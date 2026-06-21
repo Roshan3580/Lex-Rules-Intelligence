@@ -128,7 +128,7 @@ def create_app() -> FastAPI:
         )
         from .services import scheduler_service
 
-        scheduler_service.configure_scheduler()
+        scheduler_service.configure_scheduler(SessionLocal)
 
 
     @app.on_event("shutdown")

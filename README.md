@@ -53,7 +53,7 @@ full audit trail.
   via `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`); deterministic
   fallback when no key is set
 - **Frontend:** React 18 + TypeScript + Vite + Tailwind + shadcn/ui +
-  TanStack Query (Lovable-generated UI, wired to the backend)
+  TanStack Query (wired to the backend)
 
 ## Architecture
 
