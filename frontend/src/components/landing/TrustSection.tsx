@@ -69,12 +69,6 @@ export function TrustSection() {
                 Open the dashboard
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
-              <a
-                href="mailto:roshar1@uci.edu"
-                className="inline-flex items-center justify-center border border-[hsl(var(--landing-border))] bg-white px-6 py-3.5 text-[11px] font-medium uppercase tracking-[0.16em] text-[hsl(var(--landing-fg))] transition-colors hover:border-[hsl(var(--landing-fg))]"
-              >
-                Contact us
-              </a>
             </div>
           </div>
         </div>

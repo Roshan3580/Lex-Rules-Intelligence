@@ -6,7 +6,7 @@ Phase 6 hardening:
   back empty or near-empty we return the canned "insufficient sources"
   response instead of letting the LLM speculate.
 - LLM prompt is tightened to forbid invented forms/deadlines/$/% and to
-  emit a structured answer with the brief's required sections.
+  emit a structured answer with the required response sections.
 - Generated answers are scanned for fabricated specifics; flagged items
   are surfaced as `safety_flags` and the confidence is downgraded.
 - Every successful answer ends with a standard disclaimer.

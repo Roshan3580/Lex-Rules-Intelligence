@@ -1,4 +1,4 @@
-"""Lightweight periodic jobs — APScheduler optional (Brief §4.5)."""
+"""Lightweight periodic jobs — APScheduler optional."""
 
 from __future__ import annotations
 

@@ -1,11 +1,12 @@
-# State tax corpus — aligned to Engineer Brief (Product Overview v2)
+# Illustrative state tax source index for portfolio demos.
+# NOT authoritative legal or tax data. Used by POST /api/ingest/run batch ingest.
 #
-# §4.5 / §7 — Ingestion: POST /api/ingest/run batches this list; checksum dedupe skips
+# Ingestion: POST /api/ingest/run batches this list; checksum dedupe skips
 #            unchanged text; POST /api/monitor/run re-fetches URL-backed rows.
-# §4.1 / §5 — Each row tags jurisdiction (`state`) + program bucket (`tax_type`) so
-#            search and /api/query can filter. `general_tax` marks a multi-program
-#            state portal entry; pilot rows add authoritative program pages.
-# §4.2     — Prefer direct form/filing/bulletin URLs where you add them (PDF rows OK).
+# Each row tags jurisdiction (`state`) + program bucket (`tax_type`) so
+# search and /api/query can filter. `general_tax` marks a multi-program
+# state portal entry; pilot rows add program-specific pages for demos.
+# Prefer direct form/filing/bulletin URLs where you add them (PDF rows OK).
 #
 # Expand by appending rows; keep URLs current (sites move; monitor surfaces failures).
 
@@ -317,7 +318,7 @@ sources:
     source_type: "webpage"
 
   # --------------------------------------------------------------------------
-  # Pilot program depth — CA / NY / TX (brief §4.1: program-specific sources)
+  # Pilot program depth — CA / NY / TX (illustrative program-specific sources)
   # --------------------------------------------------------------------------
   - name: "California CDTFA — Sales and Use Tax Programs"
     url: "https://www.cdtfa.ca.gov/taxes-and-fees/sutprograms.htm"

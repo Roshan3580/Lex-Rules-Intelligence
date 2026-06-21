@@ -1,4 +1,4 @@
-"""Lex Intelligence API — minimal Python client stub (Brief §4.7)."""
+"""Lex Intelligence API — minimal Python client stub."""
 
 from __future__ import annotations
 

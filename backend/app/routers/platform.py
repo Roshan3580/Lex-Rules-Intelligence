@@ -1,4 +1,4 @@
-"""KPI stubs for onboarding / governance (Brief §4.6) + cache introspection."""
+"""KPI stubs for onboarding / governance + cache introspection."""
 
 from __future__ import annotations
 

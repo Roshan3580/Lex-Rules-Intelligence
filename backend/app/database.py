@@ -104,7 +104,7 @@ def _ensure_ingestion_run_tenant_columns() -> None:
 
 
 def _ensure_governance_v1_columns() -> None:
-    """Add Engineer Brief v1 governance columns and tenant ids (SQLite + PG)."""
+    """Add governance v1 columns and tenant ids (SQLite + PG)."""
     from sqlalchemy import inspect, text
 
     dialect = engine.dialect.name
@@ -262,7 +262,7 @@ def _ensure_rules_phase2_columns() -> None:
     """Add Phase 2 governance columns on existing DBs (SQLite + Postgres).
 
     SQLAlchemy ``create_all`` does not ALTER existing tables; lightweight
-    migrations keep Engineer Brief fields (§6 program_variant, effective
+    migrations keep governance schema fields (program_variant, effective
     range) available without wiping ``rules.db``.
     """
     from sqlalchemy import inspect, text

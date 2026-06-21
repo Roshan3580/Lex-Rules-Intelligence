@@ -1,4 +1,4 @@
-"""Submission intelligence (Brief §4.2)."""
+"""Submission intelligence — filing paths and portal metadata."""
 
 from __future__ import annotations
 

@@ -75,7 +75,7 @@ FORM_RE = re.compile(r"\bForm\s+([A-Z0-9][A-Z0-9-]{1,15})\b")
 
 
 def _program_variant_for_rule(source: models.Source, rule_dict: dict[str, Any]) -> dict[str, Any]:
-    """Engineer brief §6 — program / variant metadata tied to the source."""
+    """Program and variant metadata tied to the source."""
     base: dict[str, Any] = {}
     if source.state:
         base["jurisdiction"] = source.state

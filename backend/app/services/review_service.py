@@ -1,8 +1,7 @@
 """Review service: human-in-the-loop actions on extracted rules.
 
 Editing/approving/rejecting/publishing all flow through here so that every
-state change creates a ReviewEvent for traceability (Section 4.5 of the
-brief — versioning, lineage, audit trail).
+state change creates a ReviewEvent for traceability (versioning, lineage, audit trail).
 """
 
 from __future__ import annotations

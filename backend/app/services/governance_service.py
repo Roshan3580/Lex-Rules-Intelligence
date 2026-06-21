@@ -1,4 +1,4 @@
-"""Governance catalog + publish completeness (Brief §6, §8)."""
+"""Governance catalog and publish completeness checks."""
 
 from __future__ import annotations
 

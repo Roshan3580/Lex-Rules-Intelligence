@@ -70,7 +70,7 @@ VALID_REVIEW_STATUSES: set[str] = {
 # Confidence policy thresholds (Phase 4 spec).
 THRESHOLD_AUTO_VALIDATED = 0.80
 THRESHOLD_NEEDS_REVIEW = 0.55
-# Engineer brief §8 — publishing discipline: no publish below this confidence.
+# Publishing discipline: no publish below this confidence threshold.
 MIN_PUBLISH_CONFIDENCE = 0.70
 
 
@@ -261,7 +261,7 @@ def compute_review_status(confidence: float, result: ValidationResult) -> str:
 
 
 def can_publish(rule: models.Rule) -> tuple[bool, list[str]]:
-    """Hard gate for the ``publish`` review action (brief §7–§8 governance).
+    """Hard gate for the publish review action (approval + validation + confidence).
 
     Requires: schema validation pass, minimum confidence, and **human
     ``approved``** (or idempotent re-publish when already ``published``).

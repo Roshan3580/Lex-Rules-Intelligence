@@ -1,6 +1,6 @@
 """Deterministic rule execution for submission enforcement (no LLM).
 
-Maps to Engineer Brief §4.3–§4.4: pre-submission gates and explainable
+Implements pre-submission gates and explainable
 decisions. Only ``published`` and ``approved`` rules participate.
 """
 

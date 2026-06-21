@@ -1,4 +1,4 @@
-"""Stateful workflow execution gated by deterministic rule_engine (Brief §4.3)."""
+"""Stateful workflow execution gated by deterministic rule_engine."""
 
 from __future__ import annotations
 

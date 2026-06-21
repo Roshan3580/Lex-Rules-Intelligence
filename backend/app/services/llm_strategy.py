@@ -1,4 +1,4 @@
-"""Routing between cheap / premium LLM callers — extraction only; never enforcement (Brief §9, §11)."""
+"""Routing between cheap / premium LLM callers — extraction only; never enforcement."""
 
 from __future__ import annotations
 

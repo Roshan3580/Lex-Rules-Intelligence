@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models.
 
-Schema is inspired by the canonical rule model in the engineering brief
-(Section 6). For the v1 prototype we flatten a few nested objects into JSON
+Schema follows a canonical rule model for tax/compliance workflows.
+For the v1 prototype we flatten a few nested objects into JSON
 fields and store list-typed properties as JSON for portability across
 SQLite and Postgres.
 """
@@ -36,7 +36,7 @@ def _now() -> datetime:
 
 
 # ---------------------------------------------------------------------------
-# Governance (Brief §6, §9.1) — canonical dimensions
+# Governance dimensions — jurisdiction and program variant catalogs
 # ---------------------------------------------------------------------------
 
 
@@ -85,7 +85,7 @@ class RejectionReason(Base):
 
 
 class RuleRejectionLink(Base):
-    """Associates rules with catalog rejection codes (Brief §4.4)."""
+    """Associates rules with catalog rejection codes for analytics."""
 
     __tablename__ = "rule_rejection_links"
 
@@ -176,7 +176,7 @@ class SourceChunk(Base):
 class Rule(Base):
     """Canonical normalized rule.
 
-    Field set is informed by Section 6 of the brief, focused on tax rules.
+    Field set follows the canonical rule schema, focused on tax rules.
     `conditions`, `required_actions`, `required_forms`, `deadlines`,
     `exceptions` are stored as JSON arrays/objects so they survive across
     SQLite and Postgres without per-row tables.
@@ -199,7 +199,7 @@ class Rule(Base):
     submission_method: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     # online_portal | mail | in_person | eft | other
     program_variant: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
-    # Brief §6 — program_variant JSON keeps rapid iteration; optional FK canonicalizes.
+    # program_variant JSON keeps rapid iteration; optional FK canonicalizes.
     program_variant_ref_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("program_variants.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -208,7 +208,7 @@ class Rule(Base):
     )
     tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
 
-    # Structured brief fields (JSON); legacy string columns retained where present.
+    # Structured governance fields (JSON); legacy string columns retained where present.
     operating_scenario_json: Mapped[Optional[dict[str, Any]]] = mapped_column(
         JSON, nullable=True
     )
@@ -477,7 +477,7 @@ class RuleVersion(Base):
 
 
 class OutcomeEvent(Base):
-    """Structured operational outcome for coverage analytics (brief §4.4)."""
+    """Structured operational outcome for coverage analytics."""
 
     __tablename__ = "outcome_events"
 
@@ -622,7 +622,7 @@ class CaseWorkflowEvent(Base):
 
 
 # ---------------------------------------------------------------------------
-# Platform (webhooks, audit, §4.7)
+# Platform webhooks and audit tables
 # ---------------------------------------------------------------------------
 
 

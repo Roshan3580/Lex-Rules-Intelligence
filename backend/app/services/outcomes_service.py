@@ -290,7 +290,7 @@ def rejection_coverage_summary(db: Session, *, tenant_id: str = "default") -> di
 
 
 def rejection_patterns_analysis(db: Session, *, tenant_id: str = "default") -> dict[str, Any]:
-    """Cluster outcomes for analytics (Brief §4.4)."""
+    """Cluster outcomes for analytics and coverage reporting."""
     from sqlalchemy import func
 
     by_state = (

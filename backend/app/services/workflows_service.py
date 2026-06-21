@@ -1,6 +1,6 @@
 """Workflow guidance service (Phase 7).
 
-Implements the workflow layer described in the brief:
+Implements the workflow layer for case management and rule attachment:
 
 - Reusable `WorkflowTemplate`s (built-in defaults seeded once per process).
 - Per-case `CaseWorkflow` instances that snapshot the template at creation
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Canonical stages used by the brief
+# Canonical workflow stages for filing guidance
 # ---------------------------------------------------------------------------
 
 CANONICAL_STAGES: list[dict[str, str]] = [

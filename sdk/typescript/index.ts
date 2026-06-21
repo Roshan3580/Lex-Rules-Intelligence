@@ -1,5 +1,5 @@
 /**
- * Lex Intelligence API — browser client stub (Brief §4.7).
+ * Lex Intelligence API — browser client stub.
  * Point `baseUrl` at your FastAPI origin.
  */
 export type ClientOptions = { baseUrl?: string };

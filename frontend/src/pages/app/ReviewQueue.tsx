@@ -283,7 +283,7 @@ const ReviewQueue = () => {
                 <p className="text-[10px] text-muted-foreground w-full mt-2 leading-relaxed">
                   <strong className="text-foreground/80">Governance:</strong> Approve
                   first, then Publish. Publishing requires passing validation,
-                  confidence ≥ 70%, and an explicit approval (engineer brief §8).
+                  confidence ≥ 70%, and an explicit approval.
                 </p>
                 {readiness && (
                   <div className="w-full mt-2 text-[11px] text-muted-foreground">
@@ -390,7 +390,7 @@ const ReviewQueue = () => {
                     item.submission_method) && (
                     <div className="rounded-xl border border-border/60 bg-card/40 p-4 space-y-2">
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                        Program &amp; lifecycle (brief §6)
+                        Program &amp; lifecycle metadata
                       </p>
                       {item.workflow_stage && (
                         <p className="text-xs">

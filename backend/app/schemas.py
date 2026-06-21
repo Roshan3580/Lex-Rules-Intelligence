@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 TAX_CATEGORIES = [
-    "general_tax",  # jurisdiction-wide portal / index (engineer brief §4.1 program entry)
+    "general_tax",  # jurisdiction-wide portal / index entry
     "sales_tax",
     "payroll_tax",
     "corporate_tax",
@@ -341,7 +341,7 @@ class HealthOut(BaseModel):
 
 
 class QueryRequest(BaseModel):
-    """Spec-shaped request: matches the contract in the engineering brief."""
+    """Spec-shaped request matching the public API contract."""
 
     question: str = Field(..., min_length=1)
     state: Optional[str] = None

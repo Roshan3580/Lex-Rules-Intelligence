@@ -1,4 +1,4 @@
-"""Append-only audit log for governance (Brief §8)."""
+"""Append-only audit log for governance and review traceability."""
 
 from __future__ import annotations
 

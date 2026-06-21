@@ -1,4 +1,4 @@
-"""Source change → affected rules (Brief §4.5)."""
+"""Source change → affected rules and re-ingest recommendations."""
 
 from __future__ import annotations
 

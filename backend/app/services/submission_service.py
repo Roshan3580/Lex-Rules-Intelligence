@@ -1,4 +1,4 @@
-"""Submission intelligence: how to submit (Brief §4.2)."""
+"""Submission intelligence: how to submit via portals and forms."""
 
 from __future__ import annotations
 

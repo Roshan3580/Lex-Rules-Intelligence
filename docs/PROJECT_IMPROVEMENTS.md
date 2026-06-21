@@ -25,11 +25,10 @@
 
 ### P0 — before public release
 
-- **Review potentially sensitive references** — code comments and YAML headers mention an external engineering brief; README no longer references private PDFs, but grep for brief/stealth/company names before publishing
-- **Review personal contact info** — landing page includes a contact email; confirm it should be public
+- **Git history contains removed sensitive files** — see final sanitization report; use a fresh public repo or purge history before publishing
 - **Verify screenshot links** — confirm images render on GitHub (case-sensitive paths)
 - **Verify doc links** — README → `docs/*.md` relative links
-- **Confirm `.env` / `rules.db` are gitignored** — they are; do not commit secrets or local DB
+- **Confirm `.env` / `rules.db` are gitignored** — do not commit secrets or local DB
 
 ### P1 — portfolio impact
 

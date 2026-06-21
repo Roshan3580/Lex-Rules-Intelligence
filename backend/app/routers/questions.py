@@ -33,7 +33,7 @@ def query(payload: schemas.QueryRequest, db: Session = Depends(get_db)):
     """Spec-shaped Q&A endpoint.
 
     Same retrieval + grounding logic as /api/ask, but emits the response
-    shape the brief / frontend expects: { answer, state, tax_type,
+    shape the API contract / frontend expects: { answer, state, tax_type,
     sources[], confidence, ... }.
     """
     if not payload.question.strip():

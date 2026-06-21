@@ -48,7 +48,7 @@ def rule_action(
     _role: str = Depends(require_role("reviewer")),
     tenant_id: str = Depends(tenant_id_dep),
 ):
-    # Publish gate: validation + confidence + human approve (brief §8).
+    # Publish gate: validation + confidence + human approval required.
     if payload.action == "publish":
         existing = review_service.get_rule(db, rule_id, tenant_id=tenant_id)
         if existing is None:

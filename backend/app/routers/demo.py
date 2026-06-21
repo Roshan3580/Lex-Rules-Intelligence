@@ -1,4 +1,4 @@
-"""Demo reset — optional destructive for local demos (Brief §10)."""
+"""Demo reset — optional destructive for local demos (demo reset endpoint."""
 
 from __future__ import annotations
 
